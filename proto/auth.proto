@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package newsroom.auth.v1;
+option go_package = "github.com/newsroom/proto/auth/v1;authv1";
+
+// Used by all other services to validate incoming JWTs.
+service AuthService {
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+}
+
+message VerifyTokenRequest {
+  string token = 1;
+}
+
+message VerifyTokenResponse {
+  string user_id = 1;
+  string market  = 2;
+  string role    = 3;
+}
+
+message RevokeTokenRequest {
+  string token = 1;
+}
+
+message RevokeTokenResponse {
+  bool revoked = 1;
+}

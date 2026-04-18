@@ -1,0 +1,55 @@
+name: Moderation Service
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/moderation/**", "infra/schemas/**"]
+  pull_request:
+    paths: ["services/moderation/**", "infra/schemas/**"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/moderation
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: cd services/moderation && pip install -r requirements.txt
+      - run: cd services/moderation && ruff check . && mypy .
+      - run: cd services/moderation && pytest --cov=. --cov-fail-under=80 -q
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with: {images: "${{ env.IMAGE }}", tags: "type=sha,prefix="}
+      - uses: docker/build-push-action@v6
+        with: {context: services/moderation, push: true, tags: "${{ steps.meta.outputs.tags }}"}
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - run: helm upgrade --install newsroom-moderation infra/helm/newsroom --set service=moderation --set image.tag=${{ needs.build.outputs.image_tag }} --namespace staging --wait
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: kubectl argo rollouts set image newsroom-moderation moderation=${{ needs.build.outputs.image_tag }} --namespace production

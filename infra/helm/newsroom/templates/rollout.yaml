@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: newsroom-{{ .Values.service }}
+spec:
+  replicas: {{ .Values.replicaCount | default 2 }}
+  selector:
+    matchLabels:
+      app: newsroom-{{ .Values.service }}
+  template:
+    metadata:
+      labels:
+        app: newsroom-{{ .Values.service }}
+    spec:
+      containers:
+        - name: {{ .Values.service }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          ports:
+            - containerPort: 8080
+            - containerPort: 8090  # health
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8090
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          # Vault Agent sidecar writes secrets here — services read from filesystem
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory  # tmpfs — secrets never touch disk
+  strategy:
+    canary:
+      steps:
+        - setWeight: 5
+        - pause: {duration: 2m}
+        - setWeight: 50
+        - pause: {duration: 3m}
+        - setWeight: 100
+      analysis:
+        templates:
+          - templateName: error-rate
+          - templateName: p99-latency
+        args:
+          - name: service
+            value: newsroom-{{ .Values.service }}

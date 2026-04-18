@@ -1,0 +1,55 @@
+name: Correction Processor
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/correction/**"]
+  pull_request:
+    paths: ["services/correction/**"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/correction
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.22"}
+      - run: cd services/correction && go test -race -coverprofile=coverage.out ./...
+      - uses: golangci/golangci-lint-action@v6
+        with: {working-directory: services/correction}
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with: {images: "${{ env.IMAGE }}", tags: "type=sha,prefix="}
+      - uses: docker/build-push-action@v6
+        with: {context: services/correction, push: true, tags: "${{ steps.meta.outputs.tags }}"}
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - run: helm upgrade --install newsroom-correction infra/helm/newsroom --set service=correction --set image.tag=${{ needs.build.outputs.image_tag }} --namespace staging --wait
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: kubectl argo rollouts set image newsroom-correction correction=${{ needs.build.outputs.image_tag }} --namespace production

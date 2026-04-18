@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "article.published",
+  "type": "object",
+  "required": ["event_id", "trace_id", "article_id", "market", "sanity_id", "timestamp"],
+  "properties": {
+    "event_id":   {"type": "string", "format": "uuid"},
+    "trace_id":   {"type": "string"},
+    "article_id": {"type": "string", "format": "uuid"},
+    "market":     {"type": "string", "enum": ["italy", "usa", "china"]},
+    "sanity_id":  {"type": "string"},
+    "timestamp":  {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

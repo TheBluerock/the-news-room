@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: auth
+    static_configs:
+      - targets: ["auth:8090"]
+
+  - job_name: learner
+    static_configs:
+      - targets: ["learner:8090"]
+
+  - job_name: agent
+    static_configs:
+      - targets: ["agent:8090"]
+
+  - job_name: moderation
+    static_configs:
+      - targets: ["moderation:8090"]
+
+  - job_name: correction
+    static_configs:
+      - targets: ["correction:8090"]
+
+  - job_name: analytics
+    static_configs:
+      - targets: ["analytics:8090"]
+
+  - job_name: redpanda
+    static_configs:
+      - targets: ["redpanda:9644"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

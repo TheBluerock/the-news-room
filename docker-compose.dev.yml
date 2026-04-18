@@ -1,0 +1,241 @@
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: newsroom
+      POSTGRES_USER: newsroom
+      POSTGRES_PASSWORD: newsroom_dev
+    ports: ["5432:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newsroom"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis/redis-stack:latest
+    ports:
+      - "6379:6379"
+      - "8001:8001"   # RedisInsight UI
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redpanda:
+    image: redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --schema-registry-addr=0.0.0.0:8081
+    ports:
+      - "9092:9092"
+      - "8081:8081"   # Schema Registry
+      - "9644:9644"   # Admin API
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  vault:
+    image: hashicorp/vault:latest
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports: ["8200:8200"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8200/v1/sys/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./infra/tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "3200:3200"   # Tempo query API
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+    ports: ["3001:3000"]
+    depends_on: [prometheus, tempo]
+
+  caddy:
+    image: caddy:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      auth: {condition: service_healthy}
+      agent: {condition: service_healthy}
+      analytics: {condition: service_healthy}
+
+  # ── Services ────────────────────────────────────────────────────────────────
+
+  auth:
+    build: ./services/auth
+    ports: ["8080:8080", "8090:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: newsroom
+      REDIS_ADDR: redis:6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: auth
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis:    {condition: service_healthy}
+      vault:    {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  learner:
+    build: ./services/learner
+    ports: ["8082:8080", "8091:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      DB_HOST: postgres
+      REDIS_ADDR: redis:6379
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: learner
+    depends_on:
+      postgres:  {condition: service_healthy}
+      redis:     {condition: service_healthy}
+      vault:     {condition: service_healthy}
+      redpanda:  {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  agent:
+    build: ./services/agent
+    ports: ["8083:8080", "8092:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      REDIS_ADDR: redis:6379
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      LEARNER_ADDR: learner:8080
+      ANALYTICS_ADDR: analytics:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: agent
+    depends_on:
+      redis:     {condition: service_healthy}
+      vault:     {condition: service_healthy}
+      redpanda:  {condition: service_healthy}
+      learner:   {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  moderation:
+    build: ./services/moderation
+    ports: ["8084:8080", "8093:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      LEARNER_ADDR: learner:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: moderation
+    depends_on:
+      vault:     {condition: service_healthy}
+      redpanda:  {condition: service_healthy}
+      learner:   {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  correction:
+    build: ./services/correction
+    ports: ["8085:8080", "8094:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      REDIS_ADDR: redis:6379
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: correction
+    depends_on:
+      redis:    {condition: service_healthy}
+      vault:    {condition: service_healthy}
+      redpanda: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  analytics:
+    build: ./services/analytics
+    ports: ["8086:8080", "8095:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      DB_HOST: postgres
+      REDIS_ADDR: redis:6379
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: analytics
+    depends_on:
+      postgres:  {condition: service_healthy}
+      vault:     {condition: service_healthy}
+      redpanda:  {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  tempo_data:
+  caddy_data:

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "user.data.deletion.requested",
+  "type": "object",
+  "required": ["event_id", "trace_id", "user_id", "requested_by", "timestamp"],
+  "properties": {
+    "event_id":     {"type": "string", "format": "uuid"},
+    "trace_id":     {"type": "string"},
+    "user_id":      {"type": "string", "format": "uuid"},
+    "requested_by": {"type": "string", "format": "uuid"},
+    "timestamp":    {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

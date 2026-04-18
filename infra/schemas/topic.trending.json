@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "topic.trending",
+  "type": "object",
+  "required": ["event_id", "trace_id", "market", "topic_id", "topic_name", "trend_score", "timestamp"],
+  "properties": {
+    "event_id":    {"type": "string", "format": "uuid"},
+    "trace_id":    {"type": "string"},
+    "market":      {"type": "string", "enum": ["italy", "usa", "china"]},
+    "topic_id":    {"type": "string", "format": "uuid"},
+    "topic_name":  {"type": "string"},
+    "trend_score": {"type": "number"},
+    "timestamp":   {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

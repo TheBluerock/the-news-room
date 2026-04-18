@@ -1,0 +1,64 @@
+:80 {
+    # JWT RS256 validation — public key loaded from Vault Agent sidecar
+    # All routes except /api/auth/login and /api/auth/refresh require a valid JWT
+    @public {
+        path /api/auth/login
+        path /api/auth/refresh
+        path /health
+    }
+
+    @protected {
+        not path @public
+        path /api/*
+    }
+
+    # JWT middleware for protected API routes
+    # Replace <JWT_PUBLIC_KEY_PATH> with actual Vault sidecar mount in K8s
+    handle @protected {
+        # TODO: wire jwt validation — in K8s this reads from /vault/secrets/jwt_public_key
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+    }
+
+    # Auth service
+    handle /api/auth/* {
+        reverse_proxy http://auth:8080
+    }
+
+    # Agent / article generation
+    handle /api/agent/* {
+        reverse_proxy http://agent:8080
+    }
+
+    # Analytics
+    handle /api/analytics/* {
+        reverse_proxy http://analytics:8080
+    }
+
+    # Admin — audit log endpoint (Admin role enforced by auth service)
+    handle /api/admin/* {
+        reverse_proxy http://auth:8080
+    }
+
+    # GDPR deletion
+    handle /api/user/data {
+        reverse_proxy http://auth:8080
+    }
+
+    # Frontend (Next.js) — catch-all
+    handle {
+        reverse_proxy http://frontend:3000
+    }
+
+    # Health passthrough (for load balancer probes)
+    handle /health {
+        respond "ok" 200
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

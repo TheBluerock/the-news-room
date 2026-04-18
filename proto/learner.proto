@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package newsroom.learner.v1;
+option go_package = "github.com/newsroom/proto/learner/v1;learnerv1";
+
+// Called by Agent (context fetch) and Moderation (factual accuracy check).
+service LearnerService {
+  rpc QueryKnowledgeGraph(QueryRequest)     returns (QueryResponse);
+  rpc GetJournalistProfile(ProfileRequest)  returns (ProfileResponse);
+  rpc ScoreFactualAccuracy(FactualRequest)  returns (FactualResponse);
+}
+
+message QueryRequest {
+  string market = 1;
+  string query  = 2;
+  int32  limit  = 3;
+}
+
+message QueryResponse {
+  repeated KnowledgeNode nodes = 1;
+}
+
+message KnowledgeNode {
+  string id      = 1;
+  string type    = 2; // journalist | article | topic
+  string content = 3;
+  float  weight  = 4;
+}
+
+message ProfileRequest {
+  string journalist_id = 1;
+}
+
+message ProfileResponse {
+  string journalist_id  = 1;
+  string market         = 2;
+  string specialization = 3;
+  bytes  style_profile  = 4; // JSON-encoded JSONB
+}
+
+message FactualRequest {
+  string market  = 1;
+  string content = 2;
+}
+
+message FactualResponse {
+  float  accuracy_score = 1; // 0.0 – 1.0
+  repeated string issues = 2;
+}

@@ -1,0 +1,75 @@
+name: Agent Service
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/agent/**", "proto/**", "infra/schemas/**"]
+  pull_request:
+    paths: ["services/agent/**", "proto/**", "infra/schemas/**"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/agent
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: cd services/agent && pip install -r requirements.txt
+      - name: Lint
+        run: cd services/agent && ruff check . && mypy .
+      - name: Test (coverage ≥ 80%)
+        run: cd services/agent && pytest --cov=. --cov-fail-under=80 -q
+      - name: Schema validation tests
+        run: cd services/agent && pytest tests/test_schemas.py -v
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=sha,prefix=
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/agent
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          helm upgrade --install newsroom-agent infra/helm/newsroom \
+            --set service=agent \
+            --set image.tag=${{ needs.build.outputs.image_tag }} \
+            --namespace staging --wait
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          kubectl argo rollouts set image newsroom-agent \
+            agent=${{ needs.build.outputs.image_tag }} \
+            --namespace production

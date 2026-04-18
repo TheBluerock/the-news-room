@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package newsroom.analytics.v1;
+option go_package = "github.com/newsroom/proto/analytics/v1;analyticsv1";
+
+// Called by Agent during pipeline to fetch trending signals.
+service AnalyticsService {
+  rpc GetTrendingSignals(TrendingRequest)  returns (TrendingResponse);
+  rpc RecordQualityScore(QualityRequest)  returns (QualityResponse);
+}
+
+message TrendingRequest {
+  string market = 1;
+  int32  limit  = 2;
+}
+
+message TrendingResponse {
+  repeated TrendingTopic topics = 1;
+}
+
+message TrendingTopic {
+  string topic_id    = 1;
+  string topic_name  = 2;
+  float  trend_score = 3;
+}
+
+message QualityRequest {
+  string article_id    = 1;
+  string market        = 2;
+  float  quality_score = 3;
+}
+
+message QualityResponse {
+  bool recorded = 1;
+}

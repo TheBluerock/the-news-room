@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "editor.correction",
+  "type": "object",
+  "required": ["event_id", "trace_id", "correction_id", "editor_id", "article_id", "market", "correction_type", "reason", "timestamp"],
+  "properties": {
+    "event_id":        {"type": "string", "format": "uuid"},
+    "trace_id":        {"type": "string"},
+    "correction_id":   {"type": "string", "format": "uuid"},
+    "editor_id":       {"type": "string", "format": "uuid"},
+    "article_id":      {"type": "string", "format": "uuid"},
+    "market":          {"type": "string", "enum": ["italy", "usa", "china"]},
+    "correction_type": {"type": "string", "enum": ["tone", "factual", "rejection"]},
+    "reason":          {"type": "string"},
+    "old_value":       {"type": "string"},
+    "new_value":       {"type": "string"},
+    "timestamp":       {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

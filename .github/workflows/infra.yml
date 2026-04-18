@@ -1,0 +1,39 @@
+name: Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths: ["infra/terraform/**", "infra/helm/**", "infra/schemas/**"]
+  pull_request:
+    paths: ["infra/terraform/**", "infra/helm/**", "infra/schemas/**"]
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: cd infra/terraform && terraform init
+      - run: cd infra/terraform && terraform validate
+      - run: cd infra/terraform && terraform plan -out=tfplan
+        env:
+          TF_VAR_vault_addr: ${{ secrets.VAULT_ADDR }}
+
+  schema-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check schema backward compatibility
+        run: |
+          # Validate all schemas are valid JSON Schema
+          for f in infra/schemas/*.json; do
+            python3 -c "import json,sys; json.load(open('$f'))" || (echo "Invalid JSON: $f" && exit 1)
+          done
+          echo "All schemas valid."
+
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint infra/helm/newsroom

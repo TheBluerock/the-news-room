@@ -1,0 +1,89 @@
+name: Auth Service
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/auth/**", "proto/**"]
+  pull_request:
+    paths: ["services/auth/**", "proto/**"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/auth
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.22"}
+      - name: Test (with race detector)
+        run: cd services/auth && go test -race -coverprofile=coverage.out ./...
+      - name: Check coverage ≥ 75%
+        run: |
+          cd services/auth
+          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          awk "BEGIN{exit ($coverage < 75)}" || (echo "Coverage $coverage% < 75%" && exit 1)
+      - uses: golangci/golangci-lint-action@v6
+        with: {working-directory: services/auth}
+      - name: buf lint
+        uses: bufbuild/buf-action@v1
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=sha,prefix=
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/auth
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+  migrate-and-deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch DB credentials from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: secret/data/newsroom/auth postgres_dsn | DB_URL
+      - name: Run migrations (blocks deploy on failure)
+        run: make migrate-up ENV=staging
+      - name: Deploy to staging
+        run: |
+          helm upgrade --install newsroom-auth infra/helm/newsroom \
+            --set service=auth \
+            --set image.tag=${{ needs.build.outputs.image_tag }} \
+            --namespace staging --wait
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: migrate-and-deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Canary deploy (Argo Rollouts — 5%→50%→100%, auto-rollback)
+        run: |
+          kubectl argo rollouts set image newsroom-auth \
+            auth=${{ needs.build.outputs.image_tag }} \
+            --namespace production

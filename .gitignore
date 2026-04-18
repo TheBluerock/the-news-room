@@ -1,0 +1,36 @@
+# Go
+*/vendor/
+**/go.sum
+**/coverage.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
+infra/terraform/*.tfplan
+infra/terraform/tfplan
+
+# Secrets — never commit
+.env
+.env.*
+**/secrets/
+/vault/secrets/
+
+# OS
+.DS_Store
