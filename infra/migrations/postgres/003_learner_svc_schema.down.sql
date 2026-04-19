@@ -1,0 +1,2 @@
+DROP SCHEMA IF EXISTS learner_svc CASCADE;
+DROP ROLE IF EXISTS learner_rw;

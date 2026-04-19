@@ -1,17 +1,37 @@
-"""LangGraph article generation pipeline for the Agent service."""
+"""LangGraph article generation pipeline — wired to real infrastructure."""
 
 from __future__ import annotations
 
+import logging
 from typing import TypedDict
 
+import grpc
+import redis as redis_lib
+from confluent_kafka import Producer
 from langgraph.graph import StateGraph
+from opentelemetry import trace
+
+from pipeline import (
+    analytics_client,
+    circuit,
+    context,
+    corrections,
+    llm,
+    memory,
+    publisher,
+    rate_limit,
+    semantic,
+)
+
+logger = logging.getLogger("agent.pipeline")
+tracer = trace.get_tracer("agent.pipeline")
 
 MARKETS = ("italy", "usa", "china")
 
 MARKET_SYSTEM_PROMPTS = {
     "italy": (
         "You are a formal Italian wine and food journalist. "
-        "Use correct DOC/DOCG/DOCG terminology. Prefer Italian terminology where appropriate. "
+        "Use correct DOC/DOCG terminology. Prefer Italian terminology where appropriate. "
         "Tone: authoritative, regional expertise."
     ),
     "usa": (
@@ -32,8 +52,14 @@ class ArticleState(TypedDict):
     topic_id: str
     topic_name: str
     trace_id: str
+    rdb: redis_lib.Redis
+    learner_channel: grpc.Channel
+    analytics_channel: grpc.Channel
+    producer: Producer
+    openai_client: object
+    anthropic_client: object
     memory: dict
-    corrections: dict
+    corrections_data: dict
     context: list
     analytics: dict
     prompt: str
@@ -44,17 +70,17 @@ class ArticleState(TypedDict):
 def build_graph() -> StateGraph:
     graph = StateGraph(ArticleState)
 
-    graph.add_node("fetch_memory", fetch_redis_short_term_memory)
-    graph.add_node("fetch_corrections", fetch_fast_path_corrections)   # 48h TTL
-    graph.add_node("fetch_context", fetch_knowledge_graph)             # gRPC → Learner
-    graph.add_node("semantic_search", search_redis_hnsw_skip_stale)    # HNSW
-    graph.add_node("fetch_analytics", get_trending_signals)            # gRPC → Analytics
-    graph.add_node("check_rate_limit", acquire_llm_token_bucket)
-    graph.add_node("check_circuit", check_llm_circuit_breaker)
-    graph.add_node("build_prompt", construct_market_prompt)
-    graph.add_node("generate", call_llm_with_fallback)
-    graph.add_node("write_memory", update_redis_short_term_memory)
-    graph.add_node("publish", emit_article_generated)
+    graph.add_node("fetch_memory", _fetch_memory)
+    graph.add_node("fetch_corrections", _fetch_corrections)
+    graph.add_node("fetch_context", _fetch_context)
+    graph.add_node("semantic_search", _semantic_search)
+    graph.add_node("fetch_analytics", _fetch_analytics)
+    graph.add_node("check_rate_limit", _check_rate_limit)
+    graph.add_node("check_circuit", _check_circuit)
+    graph.add_node("build_prompt", _build_prompt)
+    graph.add_node("generate", _generate)
+    graph.add_node("write_memory", _write_memory)
+    graph.add_node("publish", _publish)
 
     graph.set_entry_point("fetch_memory")
     graph.add_edge("fetch_memory", "fetch_corrections")
@@ -72,68 +98,85 @@ def build_graph() -> StateGraph:
     return graph.compile()
 
 
-# ── Node stubs ────────────────────────────────────────────────────────────────
+# ── Node implementations ──────────────────────────────────────────────────────
 
-def fetch_redis_short_term_memory(state: ArticleState) -> dict:
-    # TODO: HGETALL memory:<market>
-    return {"memory": {}}
-
-
-def fetch_fast_path_corrections(state: ArticleState) -> dict:
-    # TODO: GET corrections:<market>  (48h TTL key)
-    return {"corrections": {}}
+def _fetch_memory(state: ArticleState) -> dict:
+    return {"memory": memory.fetch(state["rdb"], state["market"])}
 
 
-def fetch_knowledge_graph(state: ArticleState) -> dict:
-    # TODO: gRPC LearnerService.QueryKnowledgeGraph
-    return {"context": []}
+def _fetch_corrections(state: ArticleState) -> dict:
+    return {"corrections_data": corrections.fetch(state["rdb"], state["market"])}
 
 
-def search_redis_hnsw_skip_stale(state: ArticleState) -> dict:
-    # TODO: Redis HNSW KNN search on vectors:<market>:*
-    # Skip entries where vector:stale:<article_id> exists
+def _fetch_context(state: ArticleState) -> dict:
+    nodes = context.fetch(state["learner_channel"], state["market"], state["topic_name"])
+    return {"context": nodes}
+
+
+def _semantic_search(state: ArticleState) -> dict:
+    results = semantic.search(state["rdb"], state["market"], None, state["topic_name"])
+    return {"context": state.get("context", []) + results}
+
+
+def _fetch_analytics(state: ArticleState) -> dict:
+    signals = analytics_client.get_trending(state["analytics_channel"], state["market"])
+    return {"analytics": {"trending": signals}}
+
+
+def _check_rate_limit(state: ArticleState) -> dict:
+    if not rate_limit.acquire(state["rdb"], state["market"]):
+        raise RuntimeError(f"LLM rate limit exceeded for market={state['market']}")
     return {}
 
 
-def get_trending_signals(state: ArticleState) -> dict:
-    # TODO: gRPC AnalyticsService.GetTrendingSignals
-    return {"analytics": {}}
-
-
-def acquire_llm_token_bucket(state: ArticleState) -> dict:
-    # TODO: Redis token bucket DECR llm:rate:<market>
+def _check_circuit(state: ArticleState) -> dict:
+    openai_ok = circuit.is_available(state["rdb"], state["market"], "openai")
+    anthropic_ok = circuit.is_available(state["rdb"], state["market"], "anthropic")
+    if not openai_ok and not anthropic_ok:
+        raise RuntimeError(f"all LLM circuits open for market={state['market']}")
     return {}
 
 
-def check_llm_circuit_breaker(state: ArticleState) -> dict:
-    # TODO: check circuit state — llm_circuit_state{market, provider}
-    # Open → fail fast, queue to DLQ with backoff
-    # Half-open → allow one probe
-    return {}
-
-
-def construct_market_prompt(state: ArticleState) -> dict:
+def _build_prompt(state: ArticleState) -> dict:
     system = MARKET_SYSTEM_PROMPTS[state["market"]]
-    corrections = state.get("corrections", {})
-    active_corrections = ""
-    if corrections:
-        active_corrections = f"\n\nACTIVE CORRECTIONS:\n{corrections}"
-    prompt = f"{system}{active_corrections}\n\nTopic: {state['topic_name']}"
-    return {"prompt": prompt}
+    corrs = state.get("corrections_data", {})
+    ctx = state.get("context", [])
+
+    parts = [system]
+    if corrs:
+        active = "\n".join(f"- {v.get('reason', v)}" for v in corrs.values())
+        parts.append(f"\nACTIVE EDITORIAL CORRECTIONS:\n{active}")
+    if ctx:
+        snippets = "\n".join(f"- {n.get('content', '')[:150]}" for n in ctx[:3])
+        parts.append(f"\nRELEVANT CONTEXT:\n{snippets}")
+
+    return {"prompt": "\n".join(parts) + f"\n\nTopic: {state['topic_name']}"}
 
 
-def call_llm_with_fallback(state: ArticleState) -> dict:
-    # TODO: primary → OpenAI GPT-4o, fallback → Anthropic claude-sonnet-4-6
-    # Wrap with circuit breaker per market
-    return {"content": "", "article_id": ""}
+def _generate(state: ArticleState) -> dict:
+    content, article_id = llm.generate(
+        state["rdb"],
+        state["market"],
+        state["prompt"],
+        state["openai_client"],
+        state["anthropic_client"],
+    )
+    return {"content": content, "article_id": article_id}
 
 
-def update_redis_short_term_memory(state: ArticleState) -> dict:
-    # TODO: HSET memory:<market> topic_name ... updated_at ...  EXPIRE 604800
+def _write_memory(state: ArticleState) -> dict:
+    summary = (state.get("content") or "")[:200]
+    memory.write(state["rdb"], state["market"], state["topic_name"], summary)
     return {}
 
 
-def emit_article_generated(state: ArticleState) -> dict:
-    # TODO: validate against infra/schemas/article.generated.json
-    # TODO: produce to RedPanda topic article.generated with W3C TraceContext header
+def _publish(state: ArticleState) -> dict:
+    publisher.publish(
+        state["producer"],
+        state["market"],
+        state["topic_id"],
+        state["article_id"],
+        state["content"],
+        state["trace_id"],
+    )
     return {}

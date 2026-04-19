@@ -3,11 +3,12 @@ syntax = "proto3";
 package newsroom.learner.v1;
 option go_package = "github.com/newsroom/proto/learner/v1;learnerv1";
 
-// Called by Agent (context fetch) and Moderation (factual accuracy check).
+// Called by Agent (context fetch), Moderation (factual accuracy check), and Frontend (editorial suggestions).
 service LearnerService {
-  rpc QueryKnowledgeGraph(QueryRequest)     returns (QueryResponse);
-  rpc GetJournalistProfile(ProfileRequest)  returns (ProfileResponse);
-  rpc ScoreFactualAccuracy(FactualRequest)  returns (FactualResponse);
+  rpc QueryKnowledgeGraph(QueryRequest)       returns (QueryResponse);
+  rpc GetJournalistProfile(ProfileRequest)    returns (ProfileResponse);
+  rpc ScoreFactualAccuracy(FactualRequest)    returns (FactualResponse);
+  rpc GetTopicSuggestions(SuggestionsRequest) returns (SuggestionsResponse);
 }
 
 message QueryRequest {
@@ -46,4 +47,20 @@ message FactualRequest {
 message FactualResponse {
   float  accuracy_score = 1; // 0.0 – 1.0
   repeated string issues = 2;
+}
+
+message SuggestionsRequest {
+  string market = 1;
+  int32  limit  = 2;
+}
+
+message TopicSuggestion {
+  string topic_id     = 1;
+  string topic_name   = 2;
+  int32  source_count = 3;
+  repeated string example_urls = 4;
+}
+
+message SuggestionsResponse {
+  repeated TopicSuggestion suggestions = 1;
 }

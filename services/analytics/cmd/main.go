@@ -8,12 +8,22 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/jackc/pgx/v5/pgxpool"
+	analyticsv1 "github.com/newsroom/proto/analytics/v1"
+	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+
+	grpcserver "github.com/newsroom/analytics/internal/grpc"
+	"github.com/newsroom/analytics/internal/telemetry"
+	"github.com/newsroom/analytics/internal/tracker"
+	"github.com/newsroom/analytics/internal/trends"
+	"github.com/newsroom/analytics/internal/vault"
 )
 
 func main() {
@@ -23,21 +33,88 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	var ready atomic.Bool
-	healthSrv := startHealthServer(&ready)
 
-	// TODO: connect to PostgreSQL, Redis, RedPanda
-	// TODO: register OTel tracer
-	// TODO: start RedPanda consumer for article.published
-	// TODO: start trend detection sliding-window goroutine
-	// TODO: publish topic.trending when trend_score crosses threshold
-
-	lis, err := net.Listen("tcp", ":8080")
+	// ── Telemetry ────────────────────────────────────────────────────────────
+	telShutdown, metricsHandler, err := telemetry.Init(ctx, "analytics")
 	if err != nil {
-		logger.Error("failed to listen", "err", err)
+		logger.Warn("telemetry init failed, continuing without observability", "err", err)
+		metricsHandler = http.NotFoundHandler()
+	}
+	healthSrv := startHealthServer(&ready, metricsHandler)
+
+	// ── Vault ────────────────────────────────────────────────────────────────
+	secrets, err := vault.Load("analytics")
+	if err != nil {
+		logger.Error("vault load failed", "err", err)
 		os.Exit(1)
 	}
-	grpcSrv := grpc.NewServer()
-	// analyticsv1.RegisterAnalyticsServiceServer(grpcSrv, &analyticsServer{})
+
+	postgresDSN, err := secrets.Require("postgres_dsn")
+	if err != nil {
+		logger.Error("missing postgres_dsn", "err", err)
+		os.Exit(1)
+	}
+	redisAddr, err := secrets.Require("redis_addr")
+	if err != nil {
+		logger.Error("missing redis_addr", "err", err)
+		os.Exit(1)
+	}
+
+	// ── PostgreSQL ───────────────────────────────────────────────────────────
+	db, err := pgxpool.New(ctx, postgresDSN)
+	if err != nil {
+		logger.Error("postgres connect failed", "err", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+	if err := db.Ping(ctx); err != nil {
+		logger.Error("postgres ping failed", "err", err)
+		os.Exit(1)
+	}
+
+	// ── Redis ────────────────────────────────────────────────────────────────
+	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+	defer rdb.Close()
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		logger.Error("redis ping failed", "err", err)
+		os.Exit(1)
+	}
+
+	// ── gRPC server (:8080) ──────────────────────────────────────────────────
+	lis, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		logger.Error("listen failed", "err", err)
+		os.Exit(1)
+	}
+	redpandaBrokers, err := secrets.Require("redpanda_brokers")
+	if err != nil {
+		logger.Error("missing redpanda_brokers", "err", err)
+		os.Exit(1)
+	}
+	brokers := strings.Split(redpandaBrokers, ",")
+
+	// ── gRPC server (:8080) ──────────────────────────────────────────────────
+	analyticsServer := grpcserver.New(db, rdb)
+	grpcSrv := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
+	analyticsv1.RegisterAnalyticsServiceServer(grpcSrv, analyticsServer)
+
+	// ── Trending publisher (publishes topic.trending every 15 min) ───────────
+	pub, err := trends.NewPublisher(db, rdb, brokers, 15*time.Minute, logger)
+	if err != nil {
+		logger.Error("trending publisher init failed", "err", err)
+		os.Exit(1)
+	}
+	defer pub.Close()
+	go pub.Run(ctx)
+
+	// ── article.published consumer ───────────────────────────────────────────
+	go func() {
+		if err := tracker.RunPublishedConsumer(ctx, brokers, db, rdb, logger); err != nil && ctx.Err() == nil {
+			logger.Error("published consumer exited", "err", err)
+		}
+	}()
 
 	ready.Store(true)
 	logger.Info("analytics service ready", "grpc", ":8080", "health", ":8090")
@@ -54,10 +131,14 @@ func main() {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	healthSrv.Shutdown(shutCtx)
+	if telShutdown != nil {
+		telShutdown(shutCtx)
+	}
 }
 
-func startHealthServer(ready *atomic.Bool) *http.Server {
+func startHealthServer(ready *atomic.Bool, metricsHandler http.Handler) *http.Server {
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", metricsHandler)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -71,7 +152,6 @@ func startHealthServer(ready *atomic.Bool) *http.Server {
 		}
 		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
-	mux.Handle("/metrics", promhttp.Handler())
 	srv := &http.Server{Addr: ":8090", Handler: mux}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

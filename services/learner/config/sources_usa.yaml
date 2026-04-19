@@ -1,0 +1,11 @@
+market: usa
+scrape_interval: 6h
+feeds:
+  - url: https://www.winespectator.com/rss/rss?t=wine-news
+    category: wine
+  - url: https://www.wineenthusiast.com/feed/
+    category: wine
+  - url: https://www.foodandwine.com/syndication/rss/all.xml
+    category: food
+  - url: https://www.eater.com/rss/index.xml
+    category: food

@@ -51,16 +51,18 @@ services:
 
   vault:
     image: hashicorp/vault:latest
-    cap_add: [IPC_LOCK]
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_LOCAL_CONFIG: '{"disable_mlock": true}'
+      SKIP_SETCAP: "true"
     ports: ["8200:8200"]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8200/v1/sys/health"]
-      interval: 10s
+      test: ["CMD-SHELL", "VAULT_ADDR=http://localhost:8200 vault status | grep -E 'Initialized.*true'"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 5s
 
   tempo:
     image: grafana/tempo:latest
@@ -84,7 +86,11 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
     ports: ["3001:3000"]
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on: [prometheus, tempo]
 
   caddy:
@@ -125,17 +131,36 @@ services:
       retries: 5
 
   learner:
-    build: ./services/learner
-    ports: ["8082:8080", "8091:8090"]
+    build:
+      context: ./services/learner
+      dockerfile: Dockerfile.server
+    ports: ["8082:8080", "8091:8090", "8088:8088"]
     environment:
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-root-token
-      DB_HOST: postgres
-      REDIS_ADDR: redis:6379
-      REDPANDA_BROKERS: redpanda:29092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
-      OTEL_SERVICE_NAME: learner
+      OTEL_SERVICE_NAME: learner-server
+    depends_on:
+      postgres:  {condition: service_healthy}
+      redis:     {condition: service_healthy}
+      vault:     {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  learner-ingest:
+    build:
+      context: ./services/learner
+      dockerfile: Dockerfile.ingest
+    ports: ["8096:8090"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      CONFIG_DIR: /config
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: learner-ingest
     depends_on:
       postgres:  {condition: service_healthy}
       redis:     {condition: service_healthy}
@@ -166,7 +191,7 @@ services:
       redpanda:  {condition: service_healthy}
       learner:   {condition: service_healthy}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -187,28 +212,7 @@ services:
       redpanda:  {condition: service_healthy}
       learner:   {condition: service_healthy}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  correction:
-    build: ./services/correction
-    ports: ["8085:8080", "8094:8090"]
-    environment:
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN: dev-root-token
-      REDIS_ADDR: redis:6379
-      REDPANDA_BROKERS: redpanda:29092
-      SCHEMA_REGISTRY_URL: http://redpanda:8081
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
-      OTEL_SERVICE_NAME: correction
-    depends_on:
-      redis:    {condition: service_healthy}
-      vault:    {condition: service_healthy}
-      redpanda: {condition: service_healthy}
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -1,0 +1,22 @@
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: proto/gen/go
+    opt: paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: proto/gen/go
+    opt: paths=source_relative
+  - local: python
+    out: proto/gen/python
+    opt: []
+  - local: pyi
+    out: proto/gen/python
+    opt: []
+  - local: grpc_python
+    out: proto/gen/python
+    opt: []
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/newsroom/proto

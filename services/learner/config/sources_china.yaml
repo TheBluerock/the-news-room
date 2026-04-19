@@ -1,0 +1,11 @@
+market: china
+scrape_interval: 6h
+feeds:
+  - url: https://www.decanterchina.com/feed/
+    category: wine
+  - url: https://www.winebusiness.com/rss/?sec=newsheadlines
+    category: wine
+  - url: https://www.thedrinksbusiness.com/feed/
+    category: wine
+  - url: https://www.timeoutbeijing.com/feed/food-and-drink/
+    category: food

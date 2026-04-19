@@ -1,0 +1,11 @@
+market: italy
+scrape_interval: 6h
+feeds:
+  - url: https://www.gamberorosso.it/feed/
+    category: wine
+  - url: https://www.winenews.it/feed/
+    category: wine
+  - url: https://www.identitagolose.it/feed/
+    category: food
+  - url: https://www.ristorantionline.com/news/feed/
+    category: food

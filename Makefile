@@ -1,5 +1,5 @@
 .PHONY: dev-up dev-down vault-seed migrate-up migrate-down \
-        dlq-list dlq-replay load-test proto \
+        redpanda-setup dlq-list dlq-replay load-test proto \
         test test-go test-python lint lint-go lint-python
 
 ENV ?= local
@@ -16,11 +16,19 @@ VAULT_ADDR         := $(VAULT_ADDR_$(ENV))
 GO_SERVICES := auth learner correction analytics
 PY_SERVICES := agent moderation
 
+INFRA_SERVICES := postgres redis redpanda vault tempo prometheus grafana
+
 dev-up:
-	docker compose -f docker-compose.dev.yml up -d --wait
-	@echo "Stack is up. Seeding Vault and running migrations..."
+	@echo "==> Starting infrastructure..."
+	docker compose -f docker-compose.dev.yml up -d --wait $(INFRA_SERVICES)
+	@echo "==> Seeding Vault..."
 	$(MAKE) vault-seed
+	@echo "==> Running migrations..."
 	$(MAKE) migrate-up ENV=local
+	@echo "==> Setting up Redpanda topics and schemas..."
+	$(MAKE) redpanda-setup
+	@echo "==> Starting services..."
+	docker compose -f docker-compose.dev.yml up -d --wait
 
 dev-down:
 	docker compose -f docker-compose.dev.yml down -v
@@ -29,15 +37,21 @@ vault-seed:
 	VAULT_ADDR=$(VAULT_ADDR_local) VAULT_TOKEN=dev-root-token \
 		bash infra/vault/scripts/seed.sh
 
+MIGRATE := go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
 migrate-up:
 	@test -n "$(DB_URL)" || (echo "ERROR: unknown ENV=$(ENV)"; exit 1)
-	migrate -path infra/migrations/postgres \
-	        -database "$(DB_URL)" up
+	$(MIGRATE) -path infra/migrations/postgres \
+	           -database "$(DB_URL)" up
 
 migrate-down:
 	@test -n "$(DB_URL)" || (echo "ERROR: unknown ENV=$(ENV)"; exit 1)
-	migrate -path infra/migrations/postgres \
-	        -database "$(DB_URL)" down 1
+	$(MIGRATE) -path infra/migrations/postgres \
+	           -database "$(DB_URL)" down 1
+
+redpanda-setup:
+	chmod +x infra/scripts/setup-redpanda.sh
+	bash infra/scripts/setup-redpanda.sh
 
 dlq-list:
 	go run ./cmd/dlq-tool list
