@@ -95,15 +95,21 @@ def _process(event: dict, openai_client: OpenAI, producer: Producer, dlq_produce
 
 def _publish_approved(producer, event, quality, trace_id, headers):
     approved = {
-        "event_id": str(uuid.uuid4()),
-        "trace_id": trace_id,
-        "article_id": event["article_id"],
-        "market": event["market"],
-        "language": event["language"],
-        "content": event["content"],
+        "event_id":    str(uuid.uuid4()),
+        "trace_id":    trace_id,
+        "article_id":  event["article_id"],
+        "market":      event["market"],
+        "language":    event["language"],
+        "content":     event["content"],
+        "title":       event.get("title", ""),
+        "excerpt":     event.get("excerpt", ""),
+        "section":     event.get("section", "territori"),
+        "author":      event.get("author", ""),
+        "tags":        event.get("tags", []),
+        "slug":        event.get("slug", ""),
         "moderator_id": "moderation-service",
         "quality_score": quality,
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     producer.produce(
         "article.approved",

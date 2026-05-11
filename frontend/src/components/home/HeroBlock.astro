@@ -1,0 +1,49 @@
+---
+import { t, UI, type Lang } from '../../lib/i18n'
+import type { Article } from '../../lib/queries'
+
+interface Props { lang: Lang; article: Article }
+const { lang, article } = Astro.props
+
+const eyebrow = article.section.toUpperCase() + ' · ' + article.tags?.[0]?.toUpperCase()
+const date = new Date(article.approvedAt).toLocaleDateString(
+  lang === 'zh' ? 'zh-CN' : lang === 'en' ? 'en-GB' : 'it-IT',
+  { day: '2-digit', month: '2-digit', year: 'numeric' }
+).replace(/\//g, ' · ')
+---
+
+<section class="hero">
+  <div class="hero-img">
+    <!-- Image from Sanity CDN when available -->
+  </div>
+
+  <div class="hero-caption">
+    <span>{eyebrow} · {date}</span>
+    <span style="display:flex;gap:18px;align-items:center">
+      <span class="pill red">{t(UI.coverStory, lang)}</span>
+      <a class="details" href={`/${lang}/${article.articleId}/`}>{t(UI.readStory, lang)} ›</a>
+    </span>
+  </div>
+
+  <div class="hero-body">
+    <div>
+      <h2 class="head" style="font-size:54px;line-height:.95;margin:0 0 14px;max-width:14ch">
+        {article.title}
+      </h2>
+      <p class="italic" style="font-size:18px;line-height:1.45;color:var(--ink-soft);margin:0;max-width:46ch">
+        {article.excerpt}
+      </p>
+    </div>
+    <div class="hero-meta">
+      <span class="narrow" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">
+        {article.byline}
+      </span>
+      <span class="mono" style="font-size:12px;color:var(--ink)">
+        {article.readingTime} min · {date}
+      </span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        {article.tags?.slice(0, 5).map(tag => <span class="pill">{tag}</span>)}
+      </div>
+    </div>
+  </div>
+</section>

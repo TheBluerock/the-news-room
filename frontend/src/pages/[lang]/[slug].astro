@@ -1,0 +1,268 @@
+---
+import Base from '../../layouts/Base.astro'
+import AdLeaderboard from '../../components/AdLeaderboard.astro'
+import Tags from '../../components/home/Tags.astro'
+import NewsletterForm from '../../components/svelte/NewsletterForm.svelte'
+import {
+  LANGS, SECTIONS_PRIMARY, SECTIONS_SECONDARY,
+  isSectionId, t, UI, type Lang,
+} from '../../lib/i18n'
+import {
+  getAllArticleSlugs, getArticlesBySection, getArticleBySlug,
+  getRecentArticles, type Article,
+} from '../../lib/queries'
+
+export const prerender = true
+
+export async function getStaticPaths() {
+  const articleSlugs = await getAllArticleSlugs()
+  const sectionIds = [...SECTIONS_PRIMARY, ...SECTIONS_SECONDARY].map(s => s.id)
+
+  const paths: { params: { lang: string; slug: string } }[] = []
+
+  for (const lang of LANGS) {
+    for (const sectionId of sectionIds) {
+      paths.push({ params: { lang, slug: sectionId } })
+    }
+    for (const { lang: aLang, slug: articleSlug } of articleSlugs) {
+      if (aLang === lang) paths.push({ params: { lang, slug: articleSlug } })
+    }
+  }
+
+  return paths
+}
+
+const { lang, slug } = Astro.params as { lang: Lang; slug: string }
+const isSection = isSectionId(slug)
+
+// ─── Category page ────────────────────────────────────────────────────────────
+let sectionArticles: Article[] = []
+let sectionMeta: { it: string; en: string; zh: string } | null = null
+let sectionSub: { it: string; en: string; zh: string } | null = null
+
+if (isSection) {
+  sectionArticles = await getArticlesBySection(lang, slug)
+
+  const allSections = [...SECTIONS_PRIMARY, ...SECTIONS_SECONDARY]
+  const sec = allSections.find(s => s.id === slug)!
+  sectionMeta = { it: sec.it, en: sec.en, zh: sec.zh }
+
+  const subtitles: Record<string, { it: string; en: string; zh: string }> = {
+    territori:    { it: 'Mappe, suoli, microclimi. Le regioni italiane raccontate dalle radici.', en: 'Maps, soils, microclimates. Italian regions told from the roots up.', zh: '地图、土壤、微气候。从根脉处讲述意大利产区。' },
+    degustazioni: { it: 'Note di degustazione, panel alla cieca, verticali e orizzontali.', en: 'Tasting notes, blind panels, verticals and horizontals.', zh: '品鉴笔记、盲品评测、纵深与横向对比。' },
+    cantine:      { it: 'Ritratti di produttrici e produttori, dalle Alpi alla Sicilia.', en: 'Portraits of producers, from the Alps to Sicily.', zh: '酒庄主人物志，自阿尔卑斯至西西里。' },
+    itinerari:    { it: 'Viaggi in vigna a piedi, in bicicletta, in treno regionale.', en: 'Vineyard travels on foot, by bike, by regional train.', zh: '徒步、骑行、乘地方铁路的酒旅。' },
+    abbinamenti:  { it: 'Cucina e vino: una grammatica e qualche eccezione utile.', en: 'Food and wine: a grammar with a few useful exceptions.', zh: '菜与酒：一套语法，几条有用的例外。' },
+    eventi:       { it: 'Fiere, premi, anteprime: il calendario dei prossimi sei mesi.', en: 'Fairs, awards, previews: the calendar for the next six months.', zh: '展会、奖项、首发：未来六个月日程。' },
+    interviste:   { it: 'Conversazioni lunghe con chi fa il vino e chi lo racconta.', en: 'Long conversations with those who make wine and those who write it.', zh: '与酿酒人与书写者的长篇对谈。' },
+    guida:        { it: 'Cosa comprare, dove, a quale prezzo. Una bussola onesta.', en: 'What to buy, where, at what price. An honest compass.', zh: '买什么、何处买、几何价。一份诚实的指南。' },
+    sostenibilita:{ it: 'Suolo, acqua, lavoro: l\'etica dietro l\'etichetta.', en: 'Soil, water, labour: the ethics behind the label.', zh: '土壤、水、劳作：酒标背后的伦理。' },
+  }
+  sectionSub = subtitles[slug] ?? { it: '', en: '', zh: '' }
+}
+
+// ─── Article page ─────────────────────────────────────────────────────────────
+let article: Article | null = null
+let related: Article[] = []
+
+if (!isSection) {
+  article = await getArticleBySlug(slug, lang)
+  if (article) {
+    related = (await getArticlesBySection(lang, article.section)).filter(a => a.articleId !== slug).slice(0, 3)
+  }
+}
+
+const filters = {
+  it: ['Più recenti', 'Più letti', 'Verticali', 'Long read', 'Video'],
+  en: ['Latest', 'Most read', 'Verticals', 'Long reads', 'Video'],
+  zh: ['最新', '最热', '垂直评测', '长读', '影像'],
+}[lang]
+
+const gridView = { it: 'VISTA GRIGLIA · 3 COL', en: 'GRID VIEW · 3 COL', zh: '网格视图 · 三列' }[lang]
+const loadMore = t(UI.loadMore, lang)
+const weekIn = { it: 'LA SETTIMANA', en: 'THE WEEK', zh: '本周' }[lang]
+const weekSub = { it: 'in un calice — ogni venerdì alle 17', en: 'in a glass — every Friday at 5pm', zh: '尽在一杯酒中 — 每周五 17:00' }[lang]
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(
+    lang === 'zh' ? 'zh-CN' : lang === 'en' ? 'en-GB' : 'it-IT',
+    { day: '2-digit', month: '2-digit', year: 'numeric' }
+  ).replace(/\//g, ' · ')
+}
+
+function paragraphs(text: string) {
+  return text.split(/\n{2,}/).filter(Boolean)
+}
+---
+
+{isSection && sectionMeta ? (
+  <Base lang={lang} title={`${t(sectionMeta, lang).toUpperCase()} — ENOICA`} activeSection={slug}>
+    <main class="page">
+      <!-- Category header -->
+      <div class="cat-header">
+        <div class="crumb">
+          <a href={`/${lang}/`}>ENOICA</a>
+          {' / '}
+          <span>{t(sectionMeta, lang)}</span>
+          {lang !== 'zh' && <span style="color:var(--muted);margin-left:8px">· {sectionMeta.zh}</span>}
+        </div>
+        <h1>{t(sectionMeta, lang).toUpperCase()}</h1>
+        <div class="sub">
+          <p>{sectionSub && t(sectionSub, lang)}</p>
+          <span class="count">№001 — {sectionArticles.length} { { it: 'articoli pubblicati', en: 'articles published', zh: '已发布' }[lang]}</span>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="cat-filters">
+        {filters.map((f, i) => <a href="#" class={i === 0 ? 'on' : ''}>{f}</a>)}
+        <span class="spacer"></span>
+        <span class="view">{gridView}</span>
+      </div>
+
+      <AdLeaderboard lang={lang} brand={`SPONSOR — ${t(sectionMeta, lang).toUpperCase()} · CONSORZIO TUTELA`} />
+
+      <!-- Article grid -->
+      <div class="cat-grid">
+        {sectionArticles.map(a => (
+          <a class="cat-card" href={`/${lang}/${a.articleId}/`}>
+            <div class="ci"></div>
+            <div class="cb">
+              <div class="ce">
+                <span>{a.section.toUpperCase()}</span>
+                <span>{formatDate(a.approvedAt)}</span>
+              </div>
+              <h3>{a.title}</h3>
+              <p>{a.excerpt}</p>
+              <div style="margin-top:auto;display:flex;gap:6px;flex-wrap:wrap;padding-top:8px">
+                {a.tags?.slice(0, 3).map(tag => <span class="pill">{tag}</span>)}
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      <div style="display:flex;justify-content:center;padding:30px 0;border-bottom:1px solid var(--rule)">
+        <button class="narrow" style="padding:14px 26px;border:1px solid var(--rule);text-transform:uppercase;letter-spacing:.1em;font-size:12px">
+          {loadMore} ↓
+        </button>
+      </div>
+
+      <Tags lang={lang} />
+      <AdLeaderboard lang={lang} brand="TENUTA SAN LEONARDO · TRENTINO — DUE BICCHIERI ROSSI 2026" />
+
+      <section class="newsletter">
+        <h2>{weekIn}<em>{weekSub}</em></h2>
+        <NewsletterForm lang={lang} client:visible />
+      </section>
+    </main>
+  </Base>
+) : article ? (
+  <Base lang={lang} title={`${article.title} — ENOICA`} activeSection={article.section}>
+    <main class="page article">
+      <!-- Article head -->
+      <div class="art-head">
+        <div class="meta">
+          <div><span>{t(UI.section, lang)}</span><div class="v">{article.section.toUpperCase()}</div></div>
+          <div><span>{t(UI.date, lang)}</span><div class="v">{formatDate(article.approvedAt)}</div></div>
+          <div><span>{t(UI.readTime, lang)}</span><div class="v">{article.readingTime} min</div></div>
+        </div>
+        <div>
+          <h1>{article.title}</h1>
+          <p class="stand">{article.excerpt}</p>
+          <div style="display:flex;gap:14px;align-items:baseline;margin-top:18px;font-family:var(--narrow);font-size:12px;letter-spacing:.08em;text-transform:uppercase">
+            <span>{article.byline}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cover image placeholder -->
+      <div class="art-cover"></div>
+      <div class="art-cover-cap">
+        <span>{article.section.toUpperCase()} · {formatDate(article.approvedAt)}</span>
+        <span>↦ 1/1</span>
+      </div>
+
+      <AdLeaderboard lang={lang} brand={`ENOICA · ${article.section.toUpperCase()} · №001`} />
+
+      <!-- Article body -->
+      <div class="art-body">
+        <aside class="side">
+          <div>
+            {t(UI.share, lang)}
+            <div class="v" style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+              <a>X · Twitter</a>
+              <a>WhatsApp</a>
+              <a>WeChat 微信</a>
+              <a>Email</a>
+            </div>
+          </div>
+          {article.tags?.slice(0, 3).map(tag => (
+            <div class="pin"><b>{tag}</b></div>
+          ))}
+        </aside>
+
+        <div class="art-cols">
+          {paragraphs(article.content).map((para, i) => (
+            i === 0
+              ? <p><span class="drop">{para.charAt(0)}</span>{para.slice(1)}</p>
+              : <p>{para}</p>
+          ))}
+        </div>
+
+        <aside class="art-aside">
+          <div class="ad mpu">
+            <span class="ad-lbl">{ { it: 'PUBBLICITÀ · 300 × 250', en: 'ADVERTISING · 300 × 250', zh: '广告 · 300×250' }[lang]}</span>
+            <div class="ad-body">
+              <div class="display" style="font-size:22px;letter-spacing:-.02em">VINITALY 2027</div>
+            </div>
+          </div>
+          <div style="border:1px solid var(--rule);padding:14px">
+            <div class="narrow" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">
+              { { it: 'TAG', en: 'TAGS', zh: '标签' }[lang]}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              {article.tags?.map(tag => <span class="pill">{tag}</span>)}
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Related articles -->
+      {related.length > 0 && (
+        <section style="padding:30px 0;border-bottom:1px solid var(--rule)">
+          <h2 class="display" style="font-size:48px;letter-spacing:-.03em;line-height:.9;text-transform:uppercase;margin:0 0 18px">
+            {t(UI.keepReading, lang)}
+          </h2>
+          <div class="cat-grid">
+            {related.map(a => (
+              <a class="cat-card" href={`/${lang}/${a.articleId}/`}>
+                <div class="ci"></div>
+                <div class="cb">
+                  <div class="ce">
+                    <span>{a.section.toUpperCase()}</span>
+                    <span>{formatDate(a.approvedAt)}</span>
+                  </div>
+                  <h3>{a.title}</h3>
+                  <p>{a.excerpt}</p>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section class="newsletter">
+        <h2>{weekIn}<em>{weekSub}</em></h2>
+        <NewsletterForm lang={lang} client:visible />
+      </section>
+    </main>
+  </Base>
+) : (
+  <Base lang={lang} title="404 — ENOICA">
+    <main class="page" style="padding:80px 0;text-align:center">
+      <h1 class="display" style="font-size:120px">404</h1>
+      <a href={`/${lang}/`} style="font-family:var(--narrow);text-transform:uppercase;letter-spacing:.1em">← { { it: 'Torna alla home', en: 'Back to home', zh: '返回首页' }[lang]}</a>
+    </main>
+  </Base>
+)}

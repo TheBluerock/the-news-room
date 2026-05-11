@@ -187,6 +187,58 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 
 ---
 
+## LEARN-01 — MEDIO: Quality scores never fed back into agent context
+
+**Sections:** `05-agent-pipeline.md`, `04-data-models.md`
+**Status:** Identified gap, no approved solution yet
+
+**Problem:** `analytics_svc.article_performance.quality_score` is populated by `RecordQualityScore` gRPC calls after moderation, but nothing reads it back into the agent pipeline. The agent has no signal about which past articles scored well or poorly — it cannot learn to favour approaches that produce high-quality output.
+
+Three feedback signals currently reach the agent at generation time:
+- Editor corrections (fast-path Redis) ✅
+- Knowledge graph context from past articles (HNSW embeddings) ✅
+- Scraped source context ✅
+
+One signal is captured but unused:
+- Quality scores from moderation (`article_performance.quality_score`) ❌ — stored, never read
+
+**Impact:** Agent may repeat low-scoring angles indefinitely. High-quality article patterns are not reinforced. Context improves via volume (more embeddings) but not via quality signal.
+
+**Proposed solutions (not yet approved):**
+
+Option A — Quality-weighted HNSW retrieval: when Learner indexes an article embedding, store `quality_score` alongside it. `SearchSimilar` in `db/queries.go` adds `WHERE quality_score >= 0.7` or uses score as a retrieval weight multiplier. High-quality articles surface more in `semantic_search` context.
+
+Option B — Quality summary in system prompt: agent `_build_prompt` fetches average quality score per market from `article_performance` and appends a line like `"Recent quality average for italy: 0.82. Avoid: [top rejection reasons from learner_svc.rejections]"`.
+
+Option C — Both: weighted retrieval (A) for passive reinforcement + quality summary (B) for explicit signal.
+
+**Recommended:** Option C. Option A is a 2-line change in `db/queries.go`. Option B requires a new DB call in `_build_prompt` and a quality summary query in Learner's `QueryKnowledgeGraph` response or a new `GetMarketQualitySummary` gRPC method.
+
+---
+
+## MEDIA-01 — ALTO: Articles have no images
+
+**Sections:** `05-agent-pipeline.md`, `06-infrastructure.md`
+**Status:** Identified gap, Option C approved for v1
+
+**Problem:** The agent pipeline generates text only. Sanity draft documents are created with no `heroImage` or inline media. Articles publish as text-only, which is unacceptable for wine and food journalism where visual quality directly affects reader trust and engagement.
+
+**Options considered:**
+
+| Option | Approach | Risk |
+|--------|----------|------|
+| A | AI-generated images via DALL-E/Stable Diffusion — new `generate_image` node in agent pipeline, image stored in S3/R2, URL attached to Sanity mutation | Wrong/uncanny images damage brand; copyright ambiguity on generated content |
+| B | Stock photos via Unsplash/Pexels API — keywords extracted from article title, best match fetched automatically | Generic results; may not match specific wines/producers; API rate limits |
+| C | Editor-assigned in Sanity Studio — draft lands without image, human editor selects before publishing | No automation; requires editor step on every article |
+
+**Approved solution (v1):** Option C. Wine and food imagery is highly specific (correct bottle, correct producer, correct appellation) — wrong AI images are worse than no images and create editorial liability. Editors assign images in Sanity Studio before publishing. The publish action in Sanity Studio is already a manual step, so this adds no extra friction to the workflow.
+
+**Future (v2):** Option B as a suggestion layer — auto-attach a stock photo as a placeholder in the Sanity draft, editors override if needed. Requires: Unsplash/Pexels API key in Vault, keyword extraction from article title, new field `suggestedImage` in Sanity document schema.
+
+**What needs to happen now:** Sanity document schema (`_type: "article"`) must include a `heroImage` field of type `image`. The field is left empty by the connector. Sanity Studio validation should warn (not block) if `heroImage` is missing at publish time.
+
+---
+
 ## OPS-02 — BASSO: Audit log not exposed in frontend
 
 **Sections:** `07-auth.md`, `08-operations.md`

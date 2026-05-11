@@ -1,28 +1,30 @@
 {
-  "name": "newsroom-frontend",
+  "name": "enoica-frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "type-check": "astro check"
   },
   "dependencies": {
-    "next": "15.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "next-intl": "^3.17.2",
+    "@astrojs/svelte": "^8.1.0",
+    "@astrojs/vercel": "^10.0.6",
+    "@fontsource/archivo": "^5.2.8",
+    "@fontsource/archivo-black": "^5.2.8",
+    "@fontsource/archivo-narrow": "^5.2.8",
+    "@fontsource/eb-garamond": "^5.2.7",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/noto-serif-sc": "^5.2.9",
     "@sanity/client": "^6.20.1",
-    "groq": "^3.54.0"
+    "astro": "^6.3.1",
+    "svelte": "^5.55.5"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "typescript": "^5",
-    "eslint": "^8",
-    "eslint-config-next": "15.0.0"
+    "@astrojs/check": "^0.9.0",
+    "typescript": "^5.0.0"
   }
 }

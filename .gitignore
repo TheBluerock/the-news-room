@@ -34,3 +34,7 @@ infra/terraform/tfplan
 
 # OS
 .DS_Store
+
+#Uploaded files
+uploads/
+**/.vercel/**/*

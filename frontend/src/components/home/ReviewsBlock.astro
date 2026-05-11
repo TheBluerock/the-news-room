@@ -1,0 +1,30 @@
+---
+import { t, UI, type Lang } from '../../lib/i18n'
+import { MOCK_REVIEWS } from '../../data/mock'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+
+const desc = {
+  it: 'Sei vini provati alla cieca dal panel di ENOICA — punteggio in centesimi, regione e annata in evidenza.',
+  en: 'Six wines blind-tasted by the ENOICA panel — score out of 100, region and vintage in focus.',
+  zh: 'ENOICA 品鉴小组盲品的六款葡萄酒——百分制评分，标注产区与年份。',
+}[lang]
+---
+
+<section class="reviews">
+  <div class="head-col">
+    <h2>{t(UI.tastingNotes, lang)}</h2>
+    <p>{desc}</p>
+  </div>
+  <div class="reviews-list">
+    {MOCK_REVIEWS.map(r => (
+      <div class="rev">
+        <span class="producer">{r.producer}</span>
+        <span class="wine">{r.wine}</span>
+        <span class="score">{r.score}</span>
+        <span class="region">{r.region}</span>
+      </div>
+    ))}
+  </div>
+</section>

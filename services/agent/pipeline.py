@@ -62,6 +62,12 @@ class ArticleState(TypedDict):
     context: list
     prompt: str
     content: str
+    title: str
+    excerpt: str
+    section: str
+    author: str
+    tags: list
+    slug: str
     article_id: str
 
 
@@ -145,14 +151,23 @@ def _build_prompt(state: ArticleState) -> dict:
 
 
 def _generate(state: ArticleState) -> dict:
-    content, article_id = llm.generate(
+    structured, article_id = llm.generate(
         state["rdb"],
         state["market"],
         state["prompt"],
         state["openai_client"],
         state["anthropic_client"],
     )
-    return {"content": content, "article_id": article_id}
+    return {
+        "content":    structured["body"],
+        "title":      structured.get("title", ""),
+        "excerpt":    structured.get("excerpt", ""),
+        "section":    structured.get("section", "territori"),
+        "author":     structured.get("author", ""),
+        "tags":       structured.get("tags", []),
+        "slug":       llm.slugify(structured.get("title", "")),
+        "article_id": article_id,
+    }
 
 
 def _write_memory(state: ArticleState) -> dict:
@@ -168,6 +183,12 @@ def _publish(state: ArticleState) -> dict:
         state["topic_id"],
         state["article_id"],
         state["content"],
+        state["title"],
+        state["excerpt"],
+        state["section"],
+        state["author"],
+        state["tags"],
+        state["slug"],
         state["trace_id"],
     )
     return {}

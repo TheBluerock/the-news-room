@@ -1,0 +1,87 @@
+---
+import { SECTIONS_PRIMARY, SECTIONS_SECONDARY, switchLang, t, type Lang } from '../lib/i18n'
+
+interface Props {
+  lang: Lang
+  activeSection?: string
+  currentPath: string
+}
+
+const { lang, activeSection, currentPath } = Astro.props
+
+const topLinks = {
+  it: ['Newsletter', 'Podcast', 'Eventi', 'Contatti'],
+  en: ['Newsletter', 'Podcast', 'Events', 'Contact'],
+  zh: ['邮件订阅', '播客', '活动', '联系'],
+}[lang]
+
+const sub = {
+  it: 'Magazine online di vino · enoturismo · cultura del bere',
+  en: 'Online magazine on wine · wine travel · drinking culture',
+  zh: '线上杂志 · 葡萄酒 · 酒乡之旅 · 饮文化',
+}[lang]
+
+const tagline = {
+  it: 'Pubblicato a Milano, Verona e Palermo',
+  en: 'Published from Milan, Verona and Palermo',
+  zh: '由米兰、维罗纳与巴勒莫编辑出品',
+}[lang]
+
+const liveEdition = { it: 'EDIZIONE LIVE', en: 'LIVE EDITION', zh: '实时版' }[lang]
+const archive = { it: 'Arretrati', en: 'Archive', zh: '往期' }[lang]
+const homeLabel = { it: 'Home', en: 'Home', zh: '首页' }[lang]
+---
+
+<header class="page">
+  <!-- Top utility bar -->
+  <div class="topbar">
+    <div>
+      <span class="mono">EDIZIONE №001 · 17.05.2026</span>
+      <span class="dot"></span>
+      <span>{{ it: 'Magazine online · nuovi articoli ogni venerdì', en: 'Online magazine · new articles every Friday', zh: '线上杂志 · 每周五更新' }[lang]}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:18px">
+      {topLinks.map(l => <a href="#">{l}</a>)}
+      <div class="lang">
+        {(['it','en','zh'] as const).map(l => (
+          <a href={switchLang(currentPath, lang, l)} class={lang === l ? 'on' : ''}>{l.toUpperCase()}</a>
+        ))}
+      </div>
+    </div>
+  </div>
+
+  <!-- Masthead -->
+  <div class="masthead-wrap">
+    <div class="masthead">
+      <a href={`/${lang}/`}><h1 class="wordmark">ENOICA</h1></a>
+      <div class="masthead-meta">
+        <span class="issue">{liveEdition}</span>
+        {sub}<br />
+        {tagline}
+      </div>
+    </div>
+  </div>
+
+  <!-- Primary nav -->
+  <nav class="navgrid">
+    {SECTIONS_PRIMARY.map(s => (
+      <a
+        href={`/${lang}/${s.id}/`}
+        class={'navcell' + (activeSection === s.id ? ' active' : '')}
+      >
+        <span>{t(s, lang)}</span>
+        <span class="zh">{s.zh}</span>
+      </a>
+    ))}
+  </nav>
+
+  <!-- Secondary nav -->
+  <div class="secondary-nav">
+    <a href={`/${lang}/`} class={!activeSection ? 'active' : ''}>{homeLabel}</a>
+    {SECTIONS_SECONDARY.map(s => (
+      <a href={`/${lang}/${s.id}/`} class={activeSection === s.id ? 'active' : ''}>{t(s, lang)}</a>
+    ))}
+    <span class="spacer"></span>
+    <span class="right">{archive} / 2026 · 2025 · 2024</span>
+  </div>
+</header>

@@ -1,0 +1,77 @@
+---
+import { t, UI, type Lang } from '../../lib/i18n'
+import type { Article } from '../../lib/queries'
+
+interface Props { lang: Lang; feature: Article }
+const { lang, feature } = Astro.props
+
+const now = new Date()
+const day = String(now.getDate()).padStart(2, '0')
+const month = String(now.getMonth() + 1).padStart(2, '0')
+const year = now.getFullYear()
+
+const todayGuide = { it: 'Visita degustazione in Valpolicella · ore 18', en: 'Tasting visit in Valpolicella · 6pm', zh: '瓦尔波利切拉酒庄品鉴 · 18:00' }[lang]
+const newGuideQuote = {
+  it: '«Un atlante di territori, vitigni e persone. Quattordici tappe da percorrere lentamente, dal Collio all\'Etna.»',
+  en: '"An atlas of terroirs, grapes and people. Fourteen stops to take slowly, from Collio to Etna."',
+  zh: '「一份关于风土、品种与人的图集。十四站，从科利奥到埃特纳，慢行细品。」',
+}[lang]
+
+const featDate = new Date(feature.approvedAt).toLocaleDateString(
+  lang === 'zh' ? 'zh-CN' : lang === 'en' ? 'en-GB' : 'it-IT',
+  { day: '2-digit', month: '2-digit', year: 'numeric' }
+).replace(/\//g, ' · ')
+---
+
+<section class="editorial">
+  <!-- Today block -->
+  <div class="today-block">
+    <span class="lbl">{ { it: 'OGGI', en: 'TODAY', zh: '今日' }[lang] }</span>
+    <span class="num">{day}</span>
+    <span class="yr">{month} · {year}</span>
+    <span class="lbl" style="margin-top:12px">{t(UI.today, lang)}</span>
+    <span class="italic" style="font-size:14px;font-style:italic;line-height:1.3;color:var(--ink-soft)">{todayGuide}</span>
+  </div>
+
+  <!-- Utility block -->
+  <div class="util-block">
+    <div>
+      <div class="label">{t(UI.search, lang)}</div>
+      <input placeholder={t(UI.searchPh, lang)} />
+    </div>
+    <div>
+      <div class="label">{t(UI.channels, lang)}</div>
+      <div class="social">
+        <a href="#">Instagram ↗</a>
+        <a href="#">Newsletter ↗</a>
+        <a href="#">Spotify · Podcast ↗</a>
+        <a href="#">RSS · Atom ↗</a>
+        <a href="#">微信 · WeChat ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature article -->
+  <div class="feature-block">
+    <div class="eyebrow">
+      <span>{t(UI.opening, lang)}</span>
+      <span>{featDate}</span>
+    </div>
+    <div class="feat-img"></div>
+    <h3>{feature.title}</h3>
+    <p>{feature.excerpt}</p>
+    <span class="meta">{featDate} · {feature.section.toUpperCase()} · {feature.readingTime} min</span>
+  </div>
+
+  <!-- New issue -->
+  <div class="new-issue">
+    <div>
+      <span class="kicker">{t(UI.issueNo, lang)}</span>
+      <div class="big" style="margin-top:12px">
+        {t(UI.newGuide, lang)}
+        <em>{t(UI.wineMap, lang)}</em>
+      </div>
+    </div>
+    <div class="greeting">{newGuideQuote}</div>
+  </div>
+</section>

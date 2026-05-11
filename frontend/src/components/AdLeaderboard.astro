@@ -1,0 +1,42 @@
+---
+import { getAd, type Ad } from '../lib/queries'
+import type { Lang } from '../lib/i18n'
+
+interface Props {
+  lang: Lang
+  brand?: string          // fallback when no Sanity ad found
+  slot?: 'leaderboard' | 'mpu'
+  section?: string
+}
+
+const { lang, brand, slot = 'leaderboard', section } = Astro.props
+
+let ad: Ad | null = null
+try {
+  ad = await getAd(lang, slot, section)
+} catch {
+  // Sanity unavailable — fall back to prop
+}
+
+const displayBrand = ad?.brand ?? brand ?? ''
+const displayCopy  = ad?.copy  ?? ''
+const clickUrl     = ad?.url   ?? '#'
+
+if (!displayBrand) return
+
+const label = { it: 'PUBBLICITÀ', en: 'ADVERTISING', zh: '广告' }[lang]
+const size  = slot === 'leaderboard'
+  ? { it: 'Spazio sponsorizzato · banner 970 × 120', en: 'Sponsored space · 970 × 120 banner', zh: '赞助位 · 970×120 横幅' }[lang]
+  : { it: 'Spazio sponsorizzato · 300 × 250',        en: 'Sponsored space · 300 × 250',        zh: '赞助位 · 300×250' }[lang]
+---
+
+<div class={`ad ${slot}`}>
+  <span class="ad-lbl">{label}</span>
+  <div class="ad-body">
+    <a href={clickUrl} target="_blank" rel="noopener sponsored">
+      <div class="display" style="font-size:28px;letter-spacing:-.02em">{displayBrand}</div>
+      {displayCopy && <div style="font-family:var(--serif);font-style:italic;font-size:13px;margin-top:6px;color:var(--ink-soft)">{displayCopy}</div>}
+    </a>
+  </div>
+  <span class="ad-lbl">{size}</span>
+</div>

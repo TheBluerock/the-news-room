@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ad (Sanity document type)",
+  "description": "Advertising slots managed in Sanity Studio. Editors create/pause/schedule ads without a deploy.",
+  "type": "object",
+  "required": ["_type", "slot", "brand", "active"],
+  "properties": {
+    "_type":     {"type": "string", "const": "ad"},
+    "slot":      {"type": "string", "enum": ["leaderboard", "mpu"], "description": "leaderboard = 970×120 between sections; mpu = 300×250 in article sidebar"},
+    "brand":     {"type": "string", "maxLength": 120, "description": "Display name / headline for the ad"},
+    "copy":      {"type": "string", "maxLength": 200, "description": "Secondary body copy"},
+    "url":       {"type": "string", "format": "uri", "description": "Click-through URL"},
+    "markets":   {"type": "array", "items": {"type": "string", "enum": ["italy","usa","china"]}, "description": "Markets where this ad should appear"},
+    "languages": {"type": "array", "items": {"type": "string", "enum": ["it","en","zh"]}, "description": "Languages where this ad should appear"},
+    "sections":  {"type": "array", "items": {"type": "string"}, "description": "Limit to specific sections; empty = all sections"},
+    "active":    {"type": "boolean", "description": "Master on/off switch"},
+    "startDate": {"type": "string", "format": "date"},
+    "endDate":   {"type": "string", "format": "date"},
+    "priority":  {"type": "integer", "default": 0, "description": "Higher = shown first when multiple ads match"}
+  },
+  "additionalProperties": false
+}

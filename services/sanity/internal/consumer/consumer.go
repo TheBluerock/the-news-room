@@ -22,14 +22,20 @@ const (
 )
 
 type approvedEvent struct {
-	EventID      string  `json:"event_id"`
-	TraceID      string  `json:"trace_id"`
-	ArticleID    string  `json:"article_id"`
-	Market       string  `json:"market"`
-	Language     string  `json:"language"`
-	Content      string  `json:"content"`
-	QualityScore float64 `json:"quality_score"`
-	Timestamp    string  `json:"timestamp"`
+	EventID      string   `json:"event_id"`
+	TraceID      string   `json:"trace_id"`
+	ArticleID    string   `json:"article_id"`
+	Market       string   `json:"market"`
+	Language     string   `json:"language"`
+	Content      string   `json:"content"`
+	Title        string   `json:"title"`
+	Excerpt      string   `json:"excerpt"`
+	Section      string   `json:"section"`
+	Author       string   `json:"author"`
+	Tags         []string `json:"tags"`
+	Slug         string   `json:"slug"`
+	QualityScore float64  `json:"quality_score"`
+	Timestamp    string   `json:"timestamp"`
 }
 
 // Run consumes article.approved and creates Sanity draft documents.
@@ -118,6 +124,12 @@ func handle(ctx context.Context, data []byte, sanityClient *client.Client, logge
 		Market:       evt.Market,
 		Language:     evt.Language,
 		Content:      evt.Content,
+		Title:        evt.Title,
+		Excerpt:      evt.Excerpt,
+		Section:      evt.Section,
+		Author:       evt.Author,
+		Tags:         evt.Tags,
+		Slug:         evt.Slug,
 		QualityScore: evt.QualityScore,
 		ApprovedAt:   evt.Timestamp,
 	}

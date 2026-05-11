@@ -1,0 +1,52 @@
+---
+import Base from '../../layouts/Base.astro'
+import HeroBlock from '../../components/home/HeroBlock.astro'
+import EditorialGrid from '../../components/home/EditorialGrid.astro'
+import MottoRow from '../../components/home/MottoRow.astro'
+import AdLeaderboard from '../../components/AdLeaderboard.astro'
+import Sommario from '../../components/home/Sommario.astro'
+import ReviewsBlock from '../../components/home/ReviewsBlock.astro'
+import Tags from '../../components/home/Tags.astro'
+import NewsletterForm from '../../components/svelte/NewsletterForm.svelte'
+import { LANGS, type Lang } from '../../lib/i18n'
+import { getHeroArticle, getRecentArticles } from '../../lib/queries'
+
+export const prerender = true
+
+export async function getStaticPaths() {
+  return LANGS.map(lang => ({ params: { lang } }))
+}
+
+const { lang } = Astro.params as { lang: Lang }
+
+const [hero, recent] = await Promise.all([
+  getHeroArticle(lang),
+  getRecentArticles(lang, 4),
+])
+
+const feature = recent[1] ?? hero
+
+const weekIn = { it: 'LA SETTIMANA', en: 'THE WEEK', zh: '本周' }[lang]
+const weekSub = { it: 'in un calice — ogni venerdì alle 17', en: 'in a glass — every Friday at 5pm', zh: '尽在一杯酒中 — 每周五 17:00' }[lang]
+---
+
+<Base lang={lang} title={`ENOICA — ${{ it: 'Rivista del Vino', en: 'Wine Magazine', zh: '葡萄酒杂志' }[lang]} · 001`}>
+  <main class="page">
+    <HeroBlock lang={lang} article={hero} />
+    <EditorialGrid lang={lang} feature={feature} />
+    <MottoRow lang={lang} />
+    <AdLeaderboard lang={lang} brand="TENUTA DELLE ROSSE · BAROLO DOCG 2020 — IN ANTEPRIMA" />
+    <Sommario lang={lang} />
+    <ReviewsBlock lang={lang} />
+    <Tags lang={lang} />
+    <AdLeaderboard lang={lang} brand="SLOW WINE FAIR · BOLOGNA — 28 FEBBRAIO / 2 MARZO 2027" />
+
+    <section class="newsletter">
+      <h2>
+        {weekIn}
+        <em>{weekSub}</em>
+      </h2>
+      <NewsletterForm lang={lang} client:visible />
+    </section>
+  </main>
+</Base>
