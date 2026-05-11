@@ -1,12 +1,14 @@
 ---
 import Base from '../../layouts/Base.astro'
+import SEO from '../../components/SEO.astro'
 import AdLeaderboard from '../../components/AdLeaderboard.astro'
 import Tags from '../../components/home/Tags.astro'
 import NewsletterForm from '../../components/svelte/NewsletterForm.svelte'
 import {
   LANGS, SECTIONS_PRIMARY, SECTIONS_SECONDARY,
-  isSectionId, t, UI, type Lang,
+  isSectionId, t, type Lang,
 } from '../../lib/i18n'
+import { useT } from '../../i18n'
 import {
   getAllArticleSlugs, getArticlesBySection, getArticleBySlug,
   getRecentArticles, type Article,
@@ -33,12 +35,13 @@ export async function getStaticPaths() {
 }
 
 const { lang, slug } = Astro.params as { lang: Lang; slug: string }
+const T = useT(lang)
 const isSection = isSectionId(slug)
 
 // ─── Category page ────────────────────────────────────────────────────────────
 let sectionArticles: Article[] = []
 let sectionMeta: { it: string; en: string; zh: string } | null = null
-let sectionSub: { it: string; en: string; zh: string } | null = null
+let sectionSubStr = ''
 
 if (isSection) {
   sectionArticles = await getArticlesBySection(lang, slug)
@@ -47,18 +50,7 @@ if (isSection) {
   const sec = allSections.find(s => s.id === slug)!
   sectionMeta = { it: sec.it, en: sec.en, zh: sec.zh }
 
-  const subtitles: Record<string, { it: string; en: string; zh: string }> = {
-    territori:    { it: 'Mappe, suoli, microclimi. Le regioni italiane raccontate dalle radici.', en: 'Maps, soils, microclimates. Italian regions told from the roots up.', zh: '地图、土壤、微气候。从根脉处讲述意大利产区。' },
-    degustazioni: { it: 'Note di degustazione, panel alla cieca, verticali e orizzontali.', en: 'Tasting notes, blind panels, verticals and horizontals.', zh: '品鉴笔记、盲品评测、纵深与横向对比。' },
-    cantine:      { it: 'Ritratti di produttrici e produttori, dalle Alpi alla Sicilia.', en: 'Portraits of producers, from the Alps to Sicily.', zh: '酒庄主人物志，自阿尔卑斯至西西里。' },
-    itinerari:    { it: 'Viaggi in vigna a piedi, in bicicletta, in treno regionale.', en: 'Vineyard travels on foot, by bike, by regional train.', zh: '徒步、骑行、乘地方铁路的酒旅。' },
-    abbinamenti:  { it: 'Cucina e vino: una grammatica e qualche eccezione utile.', en: 'Food and wine: a grammar with a few useful exceptions.', zh: '菜与酒：一套语法，几条有用的例外。' },
-    eventi:       { it: 'Fiere, premi, anteprime: il calendario dei prossimi sei mesi.', en: 'Fairs, awards, previews: the calendar for the next six months.', zh: '展会、奖项、首发：未来六个月日程。' },
-    interviste:   { it: 'Conversazioni lunghe con chi fa il vino e chi lo racconta.', en: 'Long conversations with those who make wine and those who write it.', zh: '与酿酒人与书写者的长篇对谈。' },
-    guida:        { it: 'Cosa comprare, dove, a quale prezzo. Una bussola onesta.', en: 'What to buy, where, at what price. An honest compass.', zh: '买什么、何处买、几何价。一份诚实的指南。' },
-    sostenibilita:{ it: 'Suolo, acqua, lavoro: l\'etica dietro l\'etichetta.', en: 'Soil, water, labour: the ethics behind the label.', zh: '土壤、水、劳作：酒标背后的伦理。' },
-  }
-  sectionSub = subtitles[slug] ?? { it: '', en: '', zh: '' }
+  sectionSubStr = T.sectionSub[slug as keyof typeof T.sectionSub] ?? ''
 }
 
 // ─── Article page ─────────────────────────────────────────────────────────────
@@ -71,17 +63,6 @@ if (!isSection) {
     related = (await getArticlesBySection(lang, article.section)).filter(a => a.articleId !== slug).slice(0, 3)
   }
 }
-
-const filters = {
-  it: ['Più recenti', 'Più letti', 'Verticali', 'Long read', 'Video'],
-  en: ['Latest', 'Most read', 'Verticals', 'Long reads', 'Video'],
-  zh: ['最新', '最热', '垂直评测', '长读', '影像'],
-}[lang]
-
-const gridView = { it: 'VISTA GRIGLIA · 3 COL', en: 'GRID VIEW · 3 COL', zh: '网格视图 · 三列' }[lang]
-const loadMore = t(UI.loadMore, lang)
-const weekIn = { it: 'LA SETTIMANA', en: 'THE WEEK', zh: '本周' }[lang]
-const weekSub = { it: 'in un calice — ogni venerdì alle 17', en: 'in a glass — every Friday at 5pm', zh: '尽在一杯酒中 — 每周五 17:00' }[lang]
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(
@@ -96,7 +77,14 @@ function paragraphs(text: string) {
 ---
 
 {isSection && sectionMeta ? (
-  <Base lang={lang} title={`${t(sectionMeta, lang).toUpperCase()} — ENOICA`} activeSection={slug}>
+  <Base lang={lang} activeSection={slug}>
+    <SEO
+      slot="head"
+      lang={lang}
+      title={`${t(sectionMeta, lang).toUpperCase()} — ENOICA`}
+      description={sectionSubStr || `ENOICA · ${t(sectionMeta, lang)}`}
+      type="website"
+    />
     <main class="page">
       <!-- Category header -->
       <div class="cat-header">
@@ -108,16 +96,16 @@ function paragraphs(text: string) {
         </div>
         <h1>{t(sectionMeta, lang).toUpperCase()}</h1>
         <div class="sub">
-          <p>{sectionSub && t(sectionSub, lang)}</p>
-          <span class="count">№001 — {sectionArticles.length} { { it: 'articoli pubblicati', en: 'articles published', zh: '已发布' }[lang]}</span>
+          <p>{sectionSubStr}</p>
+          <span class="count">№001 — {sectionArticles.length} {T.category.articlesPublished}</span>
         </div>
       </div>
 
       <!-- Filters -->
       <div class="cat-filters">
-        {filters.map((f, i) => <a href="#" class={i === 0 ? 'on' : ''}>{f}</a>)}
+        {T.category.filters.map((f, i) => <a href="#" class={i === 0 ? 'on' : ''}>{f}</a>)}
         <span class="spacer"></span>
-        <span class="view">{gridView}</span>
+        <span class="view">{T.category.gridView}</span>
       </div>
 
       <AdLeaderboard lang={lang} brand={`SPONSOR — ${t(sectionMeta, lang).toUpperCase()} · CONSORZIO TUTELA`} />
@@ -144,7 +132,7 @@ function paragraphs(text: string) {
 
       <div style="display:flex;justify-content:center;padding:30px 0;border-bottom:1px solid var(--rule)">
         <button class="narrow" style="padding:14px 26px;border:1px solid var(--rule);text-transform:uppercase;letter-spacing:.1em;font-size:12px">
-          {loadMore} ↓
+          {T.article.loadMore} ↓
         </button>
       </div>
 
@@ -152,20 +140,33 @@ function paragraphs(text: string) {
       <AdLeaderboard lang={lang} brand="TENUTA SAN LEONARDO · TRENTINO — DUE BICCHIERI ROSSI 2026" />
 
       <section class="newsletter">
-        <h2>{weekIn}<em>{weekSub}</em></h2>
-        <NewsletterForm lang={lang} client:visible />
+        <h2>{T.newsletter.weekIn}<em>{T.newsletter.weekSub}</em></h2>
+        <NewsletterForm copy={T.newsletter} lang={lang} client:visible />
       </section>
     </main>
   </Base>
 ) : article ? (
-  <Base lang={lang} title={`${article.title} — ENOICA`} activeSection={article.section}>
+  <Base lang={lang} activeSection={article.section}>
+    <SEO
+      slot="head"
+      lang={lang}
+      title={`${article.title} — ENOICA`}
+      description={article.excerpt}
+      type="article"
+      article={{
+        author: article.byline,
+        publishedAt: article.approvedAt,
+        section: article.section,
+        tags: article.tags,
+      }}
+    />
     <main class="page article">
       <!-- Article head -->
       <div class="art-head">
         <div class="meta">
-          <div><span>{t(UI.section, lang)}</span><div class="v">{article.section.toUpperCase()}</div></div>
-          <div><span>{t(UI.date, lang)}</span><div class="v">{formatDate(article.approvedAt)}</div></div>
-          <div><span>{t(UI.readTime, lang)}</span><div class="v">{article.readingTime} min</div></div>
+          <div><span>{T.article.section}</span><div class="v">{article.section.toUpperCase()}</div></div>
+          <div><span>{T.article.date}</span><div class="v">{formatDate(article.approvedAt)}</div></div>
+          <div><span>{T.article.readTime}</span><div class="v">{article.readingTime} min</div></div>
         </div>
         <div>
           <h1>{article.title}</h1>
@@ -189,12 +190,12 @@ function paragraphs(text: string) {
       <div class="art-body">
         <aside class="side">
           <div>
-            {t(UI.share, lang)}
+            {T.article.share}
             <div class="v" style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
-              <a>X · Twitter</a>
-              <a>WhatsApp</a>
-              <a>WeChat 微信</a>
-              <a>Email</a>
+              <a>{T.article.shareX}</a>
+              <a>{T.article.shareWhatsApp}</a>
+              <a>{T.article.shareWeChat}</a>
+              <a>{T.article.shareEmail}</a>
             </div>
           </div>
           {article.tags?.slice(0, 3).map(tag => (
@@ -212,14 +213,14 @@ function paragraphs(text: string) {
 
         <aside class="art-aside">
           <div class="ad mpu">
-            <span class="ad-lbl">{ { it: 'PUBBLICITÀ · 300 × 250', en: 'ADVERTISING · 300 × 250', zh: '广告 · 300×250' }[lang]}</span>
+            <span class="ad-lbl">{T.article.adMpu}</span>
             <div class="ad-body">
               <div class="display" style="font-size:22px;letter-spacing:-.02em">VINITALY 2027</div>
             </div>
           </div>
           <div style="border:1px solid var(--rule);padding:14px">
             <div class="narrow" style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">
-              { { it: 'TAG', en: 'TAGS', zh: '标签' }[lang]}
+              {T.article.tags}
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px">
               {article.tags?.map(tag => <span class="pill">{tag}</span>)}
@@ -232,7 +233,7 @@ function paragraphs(text: string) {
       {related.length > 0 && (
         <section style="padding:30px 0;border-bottom:1px solid var(--rule)">
           <h2 class="display" style="font-size:48px;letter-spacing:-.03em;line-height:.9;text-transform:uppercase;margin:0 0 18px">
-            {t(UI.keepReading, lang)}
+            {T.article.keepReading}
           </h2>
           <div class="cat-grid">
             {related.map(a => (
@@ -253,16 +254,17 @@ function paragraphs(text: string) {
       )}
 
       <section class="newsletter">
-        <h2>{weekIn}<em>{weekSub}</em></h2>
-        <NewsletterForm lang={lang} client:visible />
+        <h2>{T.newsletter.weekIn}<em>{T.newsletter.weekSub}</em></h2>
+        <NewsletterForm copy={T.newsletter} lang={lang} client:visible />
       </section>
     </main>
   </Base>
 ) : (
-  <Base lang={lang} title="404 — ENOICA">
+  <Base lang={lang}>
+    <SEO slot="head" lang={lang} title="404 — ENOICA" description="Page not found" noindex={true} />
     <main class="page" style="padding:80px 0;text-align:center">
       <h1 class="display" style="font-size:120px">404</h1>
-      <a href={`/${lang}/`} style="font-family:var(--narrow);text-transform:uppercase;letter-spacing:.1em">← { { it: 'Torna alla home', en: 'Back to home', zh: '返回首页' }[lang]}</a>
+      <a href={`/${lang}/`} style="font-family:var(--narrow);text-transform:uppercase;letter-spacing:.1em">← {T.notFound.backHome}</a>
     </main>
   </Base>
 )}

@@ -1,24 +1,13 @@
 ---
-import { t, UI, type Lang } from '../../lib/i18n'
+import { type Lang } from '../../lib/i18n'
+import { useT } from '../../i18n'
 import { MOCK_MOTTO } from '../../data/mock'
 
 interface Props { lang: Lang }
 const { lang } = Astro.props
+const T = useT(lang)
 
 const words = MOCK_MOTTO[lang]
-const small = {
-  it: '14 tappe · 9 regioni · 312 produttori censiti — un atlante per chi viaggia col taccuino.',
-  en: '14 stops · 9 regions · 312 producers surveyed — an atlas for travellers with a notebook.',
-  zh: '14 站 · 9 个产区 · 312 家酒庄 — 一本携笔旅行者的图集。',
-}[lang]
-
-const visitBody = {
-  it: 'da maggio a settembre, martedì–sabato dalle 10 alle 18. La degustazione guidata (€18) include cinque vini, pane locale e un\'oliva ascolana. Prenotazione consigliata.',
-  en: 'May to September, Tuesday to Saturday 10am–6pm. The guided tasting (€18) includes five wines, local bread and an Ascolana olive. Booking recommended.',
-  zh: '5 月至 9 月，周二至周六 10:00–18:00。导览品鉴（€18）含五款葡萄酒、本地面包及一颗阿斯科拉橄榄。建议预约。',
-}[lang]
-
-const open = { it: 'Aperto al pubblico', en: 'Open to visitors', zh: '对外开放' }[lang]
 ---
 
 <section class="motto-row">
@@ -27,14 +16,14 @@ const open = { it: 'Aperto al pubblico', en: 'Open to visitors', zh: '对外开�
       <div class="lines">
         {words.map((w, i) => <div class={i === 2 ? 'accent' : ''}>{w}</div>)}
       </div>
-      <div class="small">{small}</div>
+      <div class="small">{T.motto.small}</div>
     </div>
   </div>
   <div class="motto-side">
     <div class="visit-img"></div>
     <div class="visit-text">
-      <span class="kicker">{t(UI.howToVisit, lang)}</span>
-      <p><strong>{open}: </strong>{visitBody}</p>
+      <span class="kicker">{T.motto.howToVisit}</span>
+      <p><strong>{T.motto.open}: </strong>{T.motto.visitBody}</p>
     </div>
   </div>
 </section>

@@ -1,15 +1,17 @@
 ---
-import { t, UI, type Lang } from '../../lib/i18n'
+import { t, type Lang } from '../../lib/i18n'
+import { useT } from '../../i18n'
 import { MOCK_SOMMARIO } from '../../data/mock'
 
 interface Props { lang: Lang }
 const { lang } = Astro.props
+const T = useT(lang)
 ---
 
 <section class="sommario">
   <h2>
-    <span>{t(UI.contents, lang)}</span>
-    <span class="sub">№001 · {t(UI.pages, lang)}</span>
+    <span>{T.sommario.contents}</span>
+    <span class="sub">№001 · {T.sommario.pages}</span>
   </h2>
   <div class="sommario-list">
     {MOCK_SOMMARIO.map(s => (

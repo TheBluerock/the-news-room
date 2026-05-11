@@ -1,49 +1,48 @@
 ---
 import { SECTIONS_PRIMARY, SECTIONS_SECONDARY, t, type Lang } from '../lib/i18n'
+import { useT } from '../i18n'
 
 interface Props { lang: Lang }
 const { lang } = Astro.props
+const T = useT(lang)
 
 const cols = [
   {
-    h: { it: 'Rivista', en: 'Magazine', zh: '刊物' },
+    h: T.footer.col.magazine,
     items: [
-      { it: 'Editoriale', en: 'Editorial', zh: '编辑部', href: '#' },
-      { it: 'Numeri',     en: 'Issues',    zh: '往期',   href: '#' },
-      { it: 'Abbonamenti',en: 'Subscriptions', zh: '订阅', href: '#' },
-      { it: 'Edicola',    en: 'Newsstand', zh: '订购',   href: '#' },
+      { label: T.footer.links.editorial,     href: '#' },
+      { label: T.footer.links.issues,        href: '#' },
+      { label: T.footer.links.subscriptions, href: '#' },
+      { label: T.footer.links.newsstand,     href: '#' },
     ],
   },
   {
-    h: { it: 'Sezioni', en: 'Sections', zh: '栏目' },
-    items: SECTIONS_PRIMARY.map(s => ({ ...s, href: `/${lang}/${s.id}/` })),
+    h: T.footer.col.sections,
+    items: SECTIONS_PRIMARY.map(s => ({ label: t(s, lang), href: `/${lang}/${s.id}/` })),
   },
   {
-    h: { it: 'Servizi', en: 'Services', zh: '服务' },
-    items: SECTIONS_SECONDARY.map(s => ({ ...s, href: `/${lang}/${s.id}/` })),
+    h: T.footer.col.services,
+    items: SECTIONS_SECONDARY.map(s => ({ label: t(s, lang), href: `/${lang}/${s.id}/` })),
   },
   {
-    h: { it: 'Eventi', en: 'Events', zh: '活动' },
+    h: T.footer.col.events,
     items: [
-      { it: 'Slow Wine Fair',      en: 'Slow Wine Fair',      zh: '慢酒展',     href: '#' },
-      { it: 'Vinitaly',            en: 'Vinitaly',            zh: '维罗纳酒展', href: '#' },
-      { it: 'Cernilli Tasting',    en: 'Cernilli Tasting',    zh: '切尔尼利品鉴', href: '#' },
-      { it: 'Calendario',          en: 'Calendar',            zh: '日历',       href: '#' },
+      { label: T.footer.links.slowWine,  href: '#' },
+      { label: T.footer.links.vinitaly,  href: '#' },
+      { label: T.footer.links.cernilli,  href: '#' },
+      { label: T.footer.links.calendar,  href: '#' },
     ],
   },
   {
-    h: { it: 'Casa editrice', en: 'Publisher', zh: '出版方' },
+    h: T.footer.col.publisher,
     items: [
-      { it: 'Chi siamo',      en: 'About',       zh: '关于', href: '#' },
-      { it: 'Lavora con noi', en: 'Careers',     zh: '招聘', href: '#' },
-      { it: 'Pubblicità',     en: 'Advertising', zh: '广告', href: '#' },
-      { it: 'Privacy',        en: 'Privacy',     zh: '隐私', href: '#' },
+      { label: T.footer.links.about,       href: '#' },
+      { label: T.footer.links.careers,     href: '#' },
+      { label: T.footer.links.advertising, href: '#' },
+      { label: T.footer.links.privacy,     href: '#' },
     ],
   },
 ]
-
-const onlineMag = { it: 'Magazine online · aggiornato ogni venerdì', en: 'Online magazine · updated every Friday', zh: '线上杂志 · 每周五更新' }[lang]
-const editor    = { it: 'Direttore responsabile: G. Roveda', en: 'Editor-in-chief: G. Roveda', zh: '主编：G. Roveda' }[lang]
 ---
 
 <footer class="page">
@@ -51,22 +50,22 @@ const editor    = { it: 'Direttore responsabile: G. Roveda', en: 'Editor-in-chie
     <div class="display" style="font-size:28px;letter-spacing:-.03em;line-height:1">ENOICA</div>
     <div style="display:flex;gap:18px;align-items:center">
       <span class="pill red">№001 · 2026</span>
-      <span class="narrow" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">{onlineMag}</span>
+      <span class="narrow" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">{T.footer.tagline}</span>
     </div>
   </div>
   <div class="footer-cols">
     {cols.map(col => (
       <div>
-        <h4>{t(col.h, lang)}</h4>
+        <h4>{col.h}</h4>
         {col.items.map(item => (
-          <a href={item.href}>{t(item, lang)}</a>
+          <a href={item.href}>{item.label}</a>
         ))}
       </div>
     ))}
   </div>
   <div class="footer-bot">
     <span>© 2026 ENOICA · Milano</span>
-    <span>{editor}</span>
+    <span>{T.footer.editor}</span>
     <span>redazione@enoica.it · @enoica_mag</span>
   </div>
 </footer>

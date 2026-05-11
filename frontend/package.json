@@ -13,6 +13,8 @@
   "dependencies": {
     "@astrojs/svelte": "^8.1.0",
     "@astrojs/vercel": "^10.0.6",
+    "@fontsource-variable/archivo": "^5.2.8",
+    "@fontsource-variable/eb-garamond": "^5.2.7",
     "@fontsource/archivo": "^5.2.8",
     "@fontsource/archivo-black": "^5.2.8",
     "@fontsource/archivo-narrow": "^5.2.8",

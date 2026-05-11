@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro'
+import SEO from '../../components/SEO.astro'
 import HeroBlock from '../../components/home/HeroBlock.astro'
 import EditorialGrid from '../../components/home/EditorialGrid.astro'
 import MottoRow from '../../components/home/MottoRow.astro'
@@ -9,6 +10,7 @@ import ReviewsBlock from '../../components/home/ReviewsBlock.astro'
 import Tags from '../../components/home/Tags.astro'
 import NewsletterForm from '../../components/svelte/NewsletterForm.svelte'
 import { LANGS, type Lang } from '../../lib/i18n'
+import { useT } from '../../i18n'
 import { getHeroArticle, getRecentArticles } from '../../lib/queries'
 
 export const prerender = true
@@ -18,6 +20,7 @@ export async function getStaticPaths() {
 }
 
 const { lang } = Astro.params as { lang: Lang }
+const T = useT(lang)
 
 const [hero, recent] = await Promise.all([
   getHeroArticle(lang),
@@ -25,12 +28,10 @@ const [hero, recent] = await Promise.all([
 ])
 
 const feature = recent[1] ?? hero
-
-const weekIn = { it: 'LA SETTIMANA', en: 'THE WEEK', zh: '本周' }[lang]
-const weekSub = { it: 'in un calice — ogni venerdì alle 17', en: 'in a glass — every Friday at 5pm', zh: '尽在一杯酒中 — 每周五 17:00' }[lang]
 ---
 
-<Base lang={lang} title={`ENOICA — ${{ it: 'Rivista del Vino', en: 'Wine Magazine', zh: '葡萄酒杂志' }[lang]} · 001`}>
+<Base lang={lang}>
+  <SEO slot="head" lang={lang} title={T.seo.homeTitle} description={T.seo.homeDescription} type="website" />
   <main class="page">
     <HeroBlock lang={lang} article={hero} />
     <EditorialGrid lang={lang} feature={feature} />
@@ -43,10 +44,10 @@ const weekSub = { it: 'in un calice — ogni venerdì alle 17', en: 'in a glass 
 
     <section class="newsletter">
       <h2>
-        {weekIn}
-        <em>{weekSub}</em>
+        {T.newsletter.weekIn}
+        <em>{T.newsletter.weekSub}</em>
       </h2>
-      <NewsletterForm lang={lang} client:visible />
+      <NewsletterForm copy={T.newsletter} lang={lang} client:visible />
     </section>
   </main>
 </Base>

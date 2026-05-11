@@ -1,6 +1,7 @@
 ---
 import { getAd, type Ad } from '../lib/queries'
 import type { Lang } from '../lib/i18n'
+import { useT } from '../i18n'
 
 interface Props {
   lang: Lang
@@ -10,6 +11,7 @@ interface Props {
 }
 
 const { lang, brand, slot = 'leaderboard', section } = Astro.props
+const T = useT(lang)
 
 let ad: Ad | null = null
 try {
@@ -24,10 +26,8 @@ const clickUrl     = ad?.url   ?? '#'
 
 if (!displayBrand) return
 
-const label = { it: 'PUBBLICITÀ', en: 'ADVERTISING', zh: '广告' }[lang]
-const size  = slot === 'leaderboard'
-  ? { it: 'Spazio sponsorizzato · banner 970 × 120', en: 'Sponsored space · 970 × 120 banner', zh: '赞助位 · 970×120 横幅' }[lang]
-  : { it: 'Spazio sponsorizzato · 300 × 250',        en: 'Sponsored space · 300 × 250',        zh: '赞助位 · 300×250' }[lang]
+const label = T.ads.label
+const size  = slot === 'leaderboard' ? T.ads.leaderboard : T.ads.mpu
 ---
 
 <div class={`ad ${slot}`}>

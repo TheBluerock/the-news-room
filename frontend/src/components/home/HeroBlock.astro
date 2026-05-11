@@ -1,9 +1,11 @@
 ---
-import { t, UI, type Lang } from '../../lib/i18n'
+import { type Lang } from '../../lib/i18n'
+import { useT } from '../../i18n'
 import type { Article } from '../../lib/queries'
 
 interface Props { lang: Lang; article: Article }
 const { lang, article } = Astro.props
+const T = useT(lang)
 
 const eyebrow = article.section.toUpperCase() + ' · ' + article.tags?.[0]?.toUpperCase()
 const date = new Date(article.approvedAt).toLocaleDateString(
@@ -20,8 +22,8 @@ const date = new Date(article.approvedAt).toLocaleDateString(
   <div class="hero-caption">
     <span>{eyebrow} · {date}</span>
     <span style="display:flex;gap:18px;align-items:center">
-      <span class="pill red">{t(UI.coverStory, lang)}</span>
-      <a class="details" href={`/${lang}/${article.articleId}/`}>{t(UI.readStory, lang)} ›</a>
+      <span class="pill red">{T.hero.coverStory}</span>
+      <a class="details" href={`/${lang}/${article.articleId}/`}>{T.hero.readStory} ›</a>
     </span>
   </div>
 

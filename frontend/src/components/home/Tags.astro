@@ -1,13 +1,15 @@
 ---
-import { t, UI, type Lang } from '../../lib/i18n'
+import { type Lang } from '../../lib/i18n'
+import { useT } from '../../i18n'
 import { MOCK_TAGS } from '../../data/mock'
 
 interface Props { lang: Lang }
 const { lang } = Astro.props
+const T = useT(lang)
 ---
 
 <section class="tags">
-  <div class="tags-head">{t(UI.tagsHead, lang)}</div>
+  <div class="tags-head">{T.tags.head}</div>
   <div class="tags-list">
     {MOCK_TAGS.map(tag => (
       <a class="tag" href={`/${lang}/degustazioni/?tag=${encodeURIComponent(tag)}`}>{tag}</a>
