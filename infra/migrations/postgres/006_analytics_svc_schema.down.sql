@@ -1,0 +1,2 @@
+DROP SCHEMA IF EXISTS analytics_svc CASCADE;
+DROP ROLE IF EXISTS analytics_rw;

@@ -38,11 +38,11 @@ JWT_KEY=$(openssl genrsa 2048 2>/dev/null | tr '\n' '§' | sed 's/§/\\n/g')
 
 kv_put newsroom/auth \
   "jwt_private_key=$JWT_KEY" \
-  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable" \
+  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable&search_path=auth_svc,public" \
   "redis_addr=redis:6379"
 
 kv_put newsroom/learner \
-  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable" \
+  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable&search_path=learner_svc,public" \
   "redis_addr=redis:6379" \
   "openai_api_key=sk-dev-placeholder" \
   "redpanda_brokers=redpanda:29092"
@@ -58,13 +58,16 @@ kv_put newsroom/moderation \
   "anthropic_api_key=sk-ant-dev-placeholder" \
   "redpanda_brokers=redpanda:29092"
 
-kv_put newsroom/correction \
+kv_put newsroom/analytics \
+  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable&search_path=analytics_svc,public" \
   "redis_addr=redis:6379" \
   "redpanda_brokers=redpanda:29092"
 
-kv_put newsroom/analytics \
-  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable" \
-  "redis_addr=redis:6379" \
+kv_put newsroom/sanity \
+  "sanity_project_id=dev-project-id" \
+  "sanity_dataset=production" \
+  "sanity_api_token=sk-dev-sanity-placeholder" \
+  "sanity_webhook_secret=dev-webhook-secret-placeholder" \
   "redpanda_brokers=redpanda:29092"
 
 echo "==> Vault seeded successfully."

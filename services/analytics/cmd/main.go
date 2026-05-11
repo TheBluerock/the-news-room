@@ -15,7 +15,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	analyticsv1 "github.com/newsroom/proto/analytics/v1"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
@@ -34,7 +33,6 @@ func main() {
 
 	var ready atomic.Bool
 
-	// ── Telemetry ────────────────────────────────────────────────────────────
 	telShutdown, metricsHandler, err := telemetry.Init(ctx, "analytics")
 	if err != nil {
 		logger.Warn("telemetry init failed, continuing without observability", "err", err)
@@ -42,7 +40,6 @@ func main() {
 	}
 	healthSrv := startHealthServer(&ready, metricsHandler)
 
-	// ── Vault ────────────────────────────────────────────────────────────────
 	secrets, err := vault.Load("analytics")
 	if err != nil {
 		logger.Error("vault load failed", "err", err)
@@ -54,13 +51,12 @@ func main() {
 		logger.Error("missing postgres_dsn", "err", err)
 		os.Exit(1)
 	}
-	redisAddr, err := secrets.Require("redis_addr")
+	redpandaBrokers, err := secrets.Require("redpanda_brokers")
 	if err != nil {
-		logger.Error("missing redis_addr", "err", err)
+		logger.Error("missing redpanda_brokers", "err", err)
 		os.Exit(1)
 	}
 
-	// ── PostgreSQL ───────────────────────────────────────────────────────────
 	db, err := pgxpool.New(ctx, postgresDSN)
 	if err != nil {
 		logger.Error("postgres connect failed", "err", err)
@@ -72,36 +68,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// ── Redis ────────────────────────────────────────────────────────────────
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
-	defer rdb.Close()
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		logger.Error("redis ping failed", "err", err)
-		os.Exit(1)
-	}
+	brokers := strings.Split(redpandaBrokers, ",")
 
-	// ── gRPC server (:8080) ──────────────────────────────────────────────────
 	lis, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		logger.Error("listen failed", "err", err)
 		os.Exit(1)
 	}
-	redpandaBrokers, err := secrets.Require("redpanda_brokers")
-	if err != nil {
-		logger.Error("missing redpanda_brokers", "err", err)
-		os.Exit(1)
-	}
-	brokers := strings.Split(redpandaBrokers, ",")
 
-	// ── gRPC server (:8080) ──────────────────────────────────────────────────
-	analyticsServer := grpcserver.New(db, rdb)
-	grpcSrv := grpc.NewServer(
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-	)
-	analyticsv1.RegisterAnalyticsServiceServer(grpcSrv, analyticsServer)
+	grpcSrv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
+	analyticsv1.RegisterAnalyticsServiceServer(grpcSrv, grpcserver.New(db))
 
-	// ── Trending publisher (publishes topic.trending every 15 min) ───────────
-	pub, err := trends.NewPublisher(db, rdb, brokers, 15*time.Minute, logger)
+	pub, err := trends.NewPublisher(db, brokers, 15*time.Minute, logger)
 	if err != nil {
 		logger.Error("trending publisher init failed", "err", err)
 		os.Exit(1)
@@ -109,9 +87,8 @@ func main() {
 	defer pub.Close()
 	go pub.Run(ctx)
 
-	// ── article.published consumer ───────────────────────────────────────────
 	go func() {
-		if err := tracker.RunPublishedConsumer(ctx, brokers, db, rdb, logger); err != nil && ctx.Err() == nil {
+		if err := tracker.RunPublishedConsumer(ctx, brokers, db, logger); err != nil && ctx.Err() == nil {
 			logger.Error("published consumer exited", "err", err)
 		}
 	}()

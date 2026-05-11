@@ -1,0 +1,424 @@
+version: "3.9"
+
+# Multi-node production Swarm stack.
+# Required env vars before deploy:
+#   REGISTRY   — container registry prefix (e.g. registry.newsroom.io)
+#   TAG        — image tag (e.g. git SHA or semver)
+#   VAULT_ADDR — production Vault address
+#
+# Docker Swarm secrets required (create with `docker secret create`):
+#   vault_role_id_<service>    — Vault AppRole role_id per service
+#   vault_secret_id_<service>  — Vault AppRole secret_id per service
+#
+# Infrastructure (postgres, redis, redpanda, vault) should run on nodes
+# labelled role=infra:  docker node update --label-add role=infra <node>
+# App services run on nodes labelled role=app.
+
+networks:
+  newsroom_net:
+    driver: overlay
+    attachable: false
+
+volumes:
+  postgres_data:
+    driver: local
+  tempo_data:
+    driver: local
+  caddy_data:
+    driver: local
+
+x-vault-entrypoint: &vault-entrypoint
+  entrypoint: ["/entrypoint.sh"]
+  configs:
+    - source: entrypoint
+      target: /entrypoint.sh
+      mode: 0755
+
+x-app-deploy: &app-deploy
+  update_config:
+    parallelism: 1
+    delay: 10s
+    order: start-first
+    failure_action: rollback
+  rollback_config:
+    parallelism: 1
+    order: start-first
+  restart_policy:
+    condition: on-failure
+    delay: 10s
+    max_attempts: 3
+
+x-infra-deploy: &infra-deploy
+  restart_policy:
+    condition: on-failure
+    delay: 15s
+  placement:
+    constraints: [node.labels.role == infra]
+
+services:
+
+  # ── Infrastructure (pin to infra nodes) ──────────────────────────────────
+
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_DB: newsroom
+      POSTGRES_USER: newsroom
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newsroom"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "2.0", memory: 4G}
+        reservations: {cpus: "0.5", memory: 1G}
+      <<: *infra-deploy
+
+  redis:
+    image: redis/redis-stack:latest
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "1.0", memory: 2G}
+        reservations: {cpus: "0.25", memory: 512M}
+      <<: *infra-deploy
+
+  redpanda:
+    image: redpandadata/redpanda:latest
+    command:
+      - redpanda
+      - start
+      - --smp=2
+      - --memory=2G
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29092
+      - --schema-registry-addr=0.0.0.0:8081
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "2.0", memory: 2G}
+        reservations: {cpus: "0.5", memory: 1G}
+      <<: *infra-deploy
+
+  vault:
+    image: hashicorp/vault:latest
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "0.5", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+      <<: *infra-deploy
+
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    configs:
+      - source: tempo_config
+        target: /etc/tempo.yaml
+    volumes:
+      - tempo_data:/var/tempo
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "1.0", memory: 1G}
+      <<: *infra-deploy
+
+  prometheus:
+    image: prom/prometheus:latest
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "0.5", memory: 512M}
+      <<: *infra-deploy
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_admin_password
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    secrets: [grafana_admin_password]
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "0.5", memory: 512M}
+      <<: *infra-deploy
+
+  caddy:
+    image: caddy:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "0.5", memory: 256M}
+      placement:
+        constraints: [node.labels.role == infra]
+      <<: *app-deploy
+
+  # ── Application services (run on app nodes) ───────────────────────────────
+
+  auth:
+    image: ${REGISTRY}/newsroom/auth:${TAG}
+    <<: *vault-entrypoint
+    command: ["/auth"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: auth
+    secrets:
+      - source: vault_role_id_auth
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_auth
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 2
+      resources:
+        limits:   {cpus: "0.5", memory: 256M}
+        reservations: {cpus: "0.1", memory: 64M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  learner:
+    image: ${REGISTRY}/newsroom/learner-server:${TAG}
+    <<: *vault-entrypoint
+    command: ["/learner-server"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: learner-server
+    secrets:
+      - source: vault_role_id_learner
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_learner
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 2
+      resources:
+        limits:   {cpus: "1.0", memory: 512M}
+        reservations: {cpus: "0.25", memory: 128M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  learner-ingest:
+    image: ${REGISTRY}/newsroom/learner-ingest:${TAG}
+    <<: *vault-entrypoint
+    command: ["/learner-ingest"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      CONFIG_DIR: /config
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: learner-ingest
+    secrets:
+      - source: vault_role_id_learner
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_learner
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      # Single replica — Kafka consumer group manages parallelism
+      replicas: 1
+      resources:
+        limits:   {cpus: "0.5", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  agent:
+    image: ${REGISTRY}/newsroom/agent:${TAG}
+    <<: *vault-entrypoint
+    command: ["/agent"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      LEARNER_ADDR: learner:8080
+      ANALYTICS_ADDR: analytics:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: agent
+    secrets:
+      - source: vault_role_id_agent
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_agent
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    deploy:
+      replicas: 2
+      resources:
+        limits:   {cpus: "1.0", memory: 512M}
+        reservations: {cpus: "0.25", memory: 128M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  moderation:
+    image: ${REGISTRY}/newsroom/moderation:${TAG}
+    <<: *vault-entrypoint
+    command: ["/moderation"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      LEARNER_ADDR: learner:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: moderation
+    secrets:
+      - source: vault_role_id_moderation
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_moderation
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    deploy:
+      replicas: 2
+      resources:
+        limits:   {cpus: "1.0", memory: 512M}
+        reservations: {cpus: "0.25", memory: 128M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  analytics:
+    image: ${REGISTRY}/newsroom/analytics:${TAG}
+    <<: *vault-entrypoint
+    command: ["/analytics"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: analytics
+    secrets:
+      - source: vault_role_id_analytics
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_analytics
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 2
+      resources:
+        limits:   {cpus: "0.5", memory: 256M}
+        reservations: {cpus: "0.1", memory: 64M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  sanity:
+    image: ${REGISTRY}/newsroom/sanity:${TAG}
+    <<: *vault-entrypoint
+    command: ["/sanity"]
+    environment:
+      VAULT_ADDR: ${VAULT_ADDR}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: sanity-connector
+    secrets:
+      - source: vault_role_id_sanity
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_sanity
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 2
+      resources:
+        limits:   {cpus: "0.25", memory: 128M}
+        reservations: {cpus: "0.05", memory: 32M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+secrets:
+  postgres_password:
+    external: true
+  grafana_admin_password:
+    external: true
+  vault_role_id_auth:
+    external: true
+  vault_secret_id_auth:
+    external: true
+  vault_role_id_learner:
+    external: true
+  vault_secret_id_learner:
+    external: true
+  vault_role_id_agent:
+    external: true
+  vault_secret_id_agent:
+    external: true
+  vault_role_id_moderation:
+    external: true
+  vault_secret_id_moderation:
+    external: true
+  vault_role_id_analytics:
+    external: true
+  vault_secret_id_analytics:
+    external: true
+  vault_role_id_sanity:
+    external: true
+  vault_secret_id_sanity:
+    external: true
+
+configs:
+  tempo_config:
+    file: ../tempo/tempo.yaml
+  prometheus_config:
+    file: ../prometheus/prometheus.yml
+  caddy_config:
+    file: ../caddy/Caddyfile
+  entrypoint:
+    file: ../docker/entrypoint.sh

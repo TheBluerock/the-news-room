@@ -33,7 +33,7 @@ Priority levels use Italian terms consistent with the project's cultural scope:
 ## REF-02 — ALTO: Single PostgreSQL schema — no per-service isolation
 
 **Sections:** `04-data-models.md`
-**Status:** Approved solution, pending implementation
+**Status:** Resolved — migrations 003 (learner_svc), 005 (auth_svc), 006 (analytics_svc) created schemas, roles, and data copies. Vault-seed DSNs updated with per-schema search_path. Service query layer not yet updated to use schema-qualified names (unblocked by search_path).
 
 **Problem:** All services share the `newsroom` (public) schema with a single Postgres role. A bug in analytics can accidentally query learner tables. Schema drift is hard to detect. There's no DB-layer enforcement of service boundaries.
 
@@ -51,7 +51,7 @@ Priority levels use Italian terms consistent with the project's cultural scope:
 ## REF-03 — ALTO: Agent→Analytics gRPC call is redundant
 
 **Sections:** `05-agent-pipeline.md`, `02-services.md`
-**Status:** Partially resolved (node removed from pipeline), cleanup pending
+**Status:** Resolved — `get_trending_signals` removed from client, `fetch_analytics` node/edges/function removed from pipeline, `analytics` field removed from `ArticleState`. `analytics_channel` plumbing retained in `main.py`/`consumer.py` for future `record_quality` wiring.
 
 **Problem:** The original pipeline design included a `fetch_analytics` node that called `AnalyticsService.GetTrendingSignals` via gRPC. This data was already present in the `topic.trending` event that triggered the pipeline. The node was identified as a duplicate roundtrip and removed from the LangGraph graph.
 
@@ -118,7 +118,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 
 ---
 
-## PHASE4-01 — CRITICO: Sanity CMS integration not implemented
+## PHASE4-01 — RESOLVED: Sanity CMS integration implemented
 
 **Sections:** `03-event-flow.md`
 **Status:** Phase 4 pending
@@ -135,19 +135,23 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 
 ---
 
-## PHASE4-02 — ALTO: Frontend not implemented
+## PHASE4-02 — ALTO: Public site not implemented
 
 **Sections:** `07-auth.md`
 **Status:** Phase 4 pending
 
-**Problem:** No editorial UI exists. Editors have no way to view pending articles, submit corrections, or approve/reject moderation decisions outside of direct API calls.
+**Problem:** No public site exists to render published articles to readers. Editors also have no UI for corrections or moderation, but that UI lives in a separate Admin app outside this repo.
 
-**Approved solution (Phase 4):**
-- Next.js 15 app at `services/frontend/`
-- Three locales: `it`, `en`, `zh` via `next-intl`
-- Pages: article list (per market), article detail + correction form, moderation queue, analytics dashboard
-- Auth: JWT via `httpOnly` cookie, refresh handled silently before expiry
-- Correction form submits to `POST /api/corrections` → publishes `editor.correction` event
+**Approved solution (Phase 4) — public site only:**
+- Astro app at `frontend/` with Svelte components for any interactivity
+- Static generation (SSG) — articles built at deploy time, no SSR runtime
+- Hosted on Vercel (static deployment, no serverless functions in this app)
+- Three locales: `it`, `en`, `zh` via Astro built-in i18n routing
+- Pages: article list (per market), article detail
+- No authentication, no correction form, no moderation queue — those belong to the Admin app
+- Sanity webhook → CI trigger that rebuilds the static site when `article.published` fires
+
+**Out of scope for this repo:** Admin UI (editorial dashboard, moderation queue, correction form, analytics dashboard). The admin app consumes the same gRPC/HTTP gateway but is developed and deployed independently.
 
 ---
 

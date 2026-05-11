@@ -1,8 +1,11 @@
 .PHONY: dev-up dev-down vault-seed migrate-up migrate-down \
         redpanda-setup dlq-list dlq-replay load-test proto \
-        test test-go test-python lint lint-go lint-python
+        test test-go test-python lint lint-go lint-python \
+        build-all swarm-deploy swarm-status swarm-rollback
 
-ENV ?= local
+ENV    ?= local
+TAG    ?= dev
+STACK  ?= newsroom
 
 DB_URL_local   := postgres://newsroom:newsroom_dev@localhost:5432/newsroom?sslmode=disable
 DB_URL_staging := $(STAGING_DB_URL)
@@ -13,7 +16,7 @@ VAULT_ADDR_local   := http://localhost:8200
 VAULT_ADDR_staging := $(STAGING_VAULT_ADDR)
 VAULT_ADDR         := $(VAULT_ADDR_$(ENV))
 
-GO_SERVICES := auth learner correction analytics
+GO_SERVICES := auth learner analytics sanity
 PY_SERVICES := agent moderation
 
 INFRA_SERVICES := postgres redis redpanda vault tempo prometheus grafana
@@ -66,6 +69,34 @@ dlq-discard:
 
 load-test:
 	k6 run infra/load-test/k6-script.js
+
+# ── Build ──────────────────────────────────────────────────────────────────────
+
+build-all:
+	docker build -t newsroom/auth:$(TAG)            services/auth
+	docker build -t newsroom/learner-server:$(TAG)  -f services/learner/Dockerfile.server services/learner
+	docker build -t newsroom/learner-ingest:$(TAG)  -f services/learner/Dockerfile.ingest services/learner
+	docker build -t newsroom/agent:$(TAG)           services/agent
+	docker build -t newsroom/moderation:$(TAG)      services/moderation
+	docker build -t newsroom/analytics:$(TAG)       services/analytics
+	docker build -t newsroom/sanity:$(TAG)          services/sanity
+
+# ── Swarm ──────────────────────────────────────────────────────────────────────
+
+SWARM_FILE_dev  := infra/swarm/stack.dev.yml
+SWARM_FILE_prod := infra/swarm/stack.prod.yml
+SWARM_FILE      := $(SWARM_FILE_$(ENV))
+
+swarm-deploy:
+	@test -n "$(SWARM_FILE)" || (echo "ERROR: unknown ENV=$(ENV)"; exit 1)
+	docker stack deploy -c $(SWARM_FILE) --with-registry-auth $(STACK)
+
+swarm-status:
+	docker stack services $(STACK)
+
+swarm-rollback:
+	@test -n "$(SERVICE)" || (echo "ERROR: SERVICE is required. Usage: make swarm-rollback SERVICE=auth"; exit 1)
+	docker service rollback $(STACK)_$(SERVICE)
 
 proto:
 	buf generate

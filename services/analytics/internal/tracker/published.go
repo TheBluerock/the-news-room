@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -30,8 +29,8 @@ type publishedEvent struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// RunPublishedConsumer consumes article.published and updates trending scores.
-func RunPublishedConsumer(ctx context.Context, brokers []string, db *pgxpool.Pool, rdb *redis.Client, logger *slog.Logger) error {
+// RunPublishedConsumer consumes article.published and records publish timestamps.
+func RunPublishedConsumer(ctx context.Context, brokers []string, db *pgxpool.Pool, logger *slog.Logger) error {
 	cl, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup("analytics-published"),
@@ -67,7 +66,7 @@ func RunPublishedConsumer(ctx context.Context, brokers []string, db *pgxpool.Poo
 				if attempt > 0 {
 					time.Sleep(retryBase * (1 << (attempt - 1)))
 				}
-				processErr = handlePublished(msgCtx, r.Value, db, rdb, logger)
+				processErr = handlePublished(msgCtx, r.Value, db, logger)
 				if processErr == nil {
 					break
 				}
@@ -86,24 +85,21 @@ func RunPublishedConsumer(ctx context.Context, brokers []string, db *pgxpool.Poo
 	}
 }
 
-func handlePublished(ctx context.Context, data []byte, db *pgxpool.Pool, rdb *redis.Client, logger *slog.Logger) error {
+func handlePublished(ctx context.Context, data []byte, db *pgxpool.Pool, logger *slog.Logger) error {
 	var evt publishedEvent
 	if err := json.Unmarshal(data, &evt); err != nil {
 		return fmt.Errorf("unmarshal: %w", err)
 	}
 
-	// Record in DB
-	_, err := db.Exec(ctx,
-		`UPDATE articles SET published_at = NOW(), sanity_id = $1 WHERE id::text = $2`,
-		evt.SanityID, evt.ArticleID,
-	)
+	// Record publish timestamp and Sanity ID — article_performance tracks this
+	_, err := db.Exec(ctx, `
+		INSERT INTO article_performance (article_id, market, published_at, created_at)
+		VALUES ($1, $2, now(), now())
+		ON CONFLICT (article_id) DO UPDATE SET published_at = now()
+	`, evt.ArticleID, evt.Market)
 	if err != nil {
-		logger.Warn("article update failed (may not exist yet)", "article_id", evt.ArticleID, "err", err)
+		logger.Warn("article_performance update failed", "article_id", evt.ArticleID, "err", err)
 	}
-
-	// Mark topic as recently covered — reduces trend score for 24h
-	coverKey := fmt.Sprintf("covered:%s:%s", evt.Market, evt.ArticleID)
-	rdb.Set(ctx, coverKey, time.Now().UTC().Format(time.RFC3339), 24*time.Hour)
 
 	logger.Info("article.published processed", "article_id", evt.ArticleID, "market", evt.Market)
 	return nil

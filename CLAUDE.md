@@ -21,7 +21,7 @@ newsroom/
 │   ├── moderation/   # Python — cultural/factual checks, gating
 │   ├── correction/   # Golang — fast path Redis corrections, 48h TTL
 │   └── analytics/    # Golang — trend detection, quality scoring
-├── frontend/         # Next.js 15, TypeScript, i18n (IT/EN/ZH)
+├── frontend/         # Astro + Svelte, static-generated articles, i18n (IT/EN/ZH), hosted on Vercel. Admin UI is a separate app (not in this repo).
 ├── proto/            # Shared gRPC definitions
 ├── infra/
 │   ├── terraform/

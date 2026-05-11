@@ -12,7 +12,6 @@ from langgraph.graph import StateGraph
 from opentelemetry import trace
 
 from pipeline import (
-    analytics_client,
     circuit,
     context,
     corrections,
@@ -61,7 +60,6 @@ class ArticleState(TypedDict):
     memory: dict
     corrections_data: dict
     context: list
-    analytics: dict
     prompt: str
     content: str
     article_id: str
@@ -74,7 +72,6 @@ def build_graph() -> StateGraph:
     graph.add_node("fetch_corrections", _fetch_corrections)
     graph.add_node("fetch_context", _fetch_context)
     graph.add_node("semantic_search", _semantic_search)
-    graph.add_node("fetch_analytics", _fetch_analytics)
     graph.add_node("check_rate_limit", _check_rate_limit)
     graph.add_node("check_circuit", _check_circuit)
     graph.add_node("build_prompt", _build_prompt)
@@ -86,8 +83,7 @@ def build_graph() -> StateGraph:
     graph.add_edge("fetch_memory", "fetch_corrections")
     graph.add_edge("fetch_corrections", "fetch_context")
     graph.add_edge("fetch_context", "semantic_search")
-    graph.add_edge("semantic_search", "fetch_analytics")
-    graph.add_edge("fetch_analytics", "check_rate_limit")
+    graph.add_edge("semantic_search", "check_rate_limit")
     graph.add_edge("check_rate_limit", "check_circuit")
     graph.add_edge("check_circuit", "build_prompt")
     graph.add_edge("build_prompt", "generate")
@@ -116,11 +112,6 @@ def _fetch_context(state: ArticleState) -> dict:
 def _semantic_search(state: ArticleState) -> dict:
     results = semantic.search(state["rdb"], state["market"], None, state["topic_name"])
     return {"context": state.get("context", []) + results}
-
-
-def _fetch_analytics(state: ArticleState) -> dict:
-    signals = analytics_client.get_trending(state["analytics_channel"], state["market"])
-    return {"analytics": {"trending": signals}}
 
 
 def _check_rate_limit(state: ArticleState) -> dict:

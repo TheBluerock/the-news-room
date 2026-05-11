@@ -133,6 +133,8 @@ The event payload includes `user_id` and `requested_at`. Each consuming service 
 
 ## Frontend Integration
 
-The Next.js frontend stores the JWT in an `httpOnly` cookie (not localStorage). The cookie is sameSite=Strict, Secure in production. Refresh is handled by the frontend via a silent background request to `/api/auth/refresh` before expiry.
+The public site is a statically-generated Astro + Svelte app deployed on Vercel; it contains no editor functionality and does not authenticate.
 
-The frontend does not perform RBAC — it renders based on claims in the JWT, but all enforcement happens in the auth service and individual service middleware.
+The Admin UI (editorial dashboard, moderation queue, correction form) lives in a separate application — not part of the public site, not in this repo. The admin app stores the JWT in an `httpOnly` cookie (not localStorage). The cookie is sameSite=Strict, Secure in production. Refresh is handled via a silent background request to `/api/auth/refresh` before expiry.
+
+The admin UI does not perform RBAC — it renders based on claims in the JWT, but all enforcement happens in the auth service and individual service middleware.

@@ -47,7 +47,7 @@ Market key is always lowercase. Every event payload, Redis key, and gRPC request
 | 1 | Foundation: services, Vault, DB migrations, gRPC proto | Complete |
 | 2 | Observability: OTel tracing, Prometheus metrics, Grafana dashboards, RedPanda topics/schemas | Complete |
 | 3 | Core AI pipeline: Agent LangGraph, Moderation checks, Analytics trends, Correction fast-path | Complete |
-| 4 | Frontend & Sanity CMS: Next.js 15 editorial UI, i18n (IT/EN/ZH), Sanity webhook → `article.published` | Pending |
+| 4 | Frontend & Sanity CMS: Astro + Svelte static public site on Vercel, i18n (IT/EN/ZH), Sanity webhook → `article.published`. Admin UI is a separate app (out of scope here). | Pending |
 | 5 | CI/CD & Hardening: GitHub Actions per-service pipelines, Argo Rollouts canary, load testing | Pending |
 
 > Phase 2 (Observability) is never skipped or deferred. Instrument before building AI features — blind LLM pipelines are undebuggable in production.
