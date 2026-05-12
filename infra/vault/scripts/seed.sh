@@ -56,7 +56,8 @@ kv_put newsroom/agent \
 kv_put newsroom/moderation \
   "openai_api_key=sk-dev-placeholder" \
   "anthropic_api_key=sk-ant-dev-placeholder" \
-  "redpanda_brokers=redpanda:29092"
+  "redpanda_brokers=redpanda:29092" \
+  "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable&search_path=moderation_svc,public"
 
 kv_put newsroom/analytics \
   "postgres_dsn=postgres://newsroom:newsroom_dev@postgres:5432/newsroom?sslmode=disable&search_path=analytics_svc,public" \

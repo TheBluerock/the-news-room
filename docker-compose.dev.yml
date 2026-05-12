@@ -208,6 +208,7 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
       OTEL_SERVICE_NAME: moderation
     depends_on:
+      postgres:  {condition: service_healthy}
       vault:     {condition: service_healthy}
       redpanda:  {condition: service_healthy}
       learner:   {condition: service_healthy}
@@ -219,7 +220,7 @@ services:
 
   analytics:
     build: ./services/analytics
-    ports: ["8086:8080", "8095:8090"]
+    ports: ["8086:8080", "8096:8081", "8095:8090"]
     environment:
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-root-token
@@ -251,6 +252,26 @@ services:
       redpanda:  {condition: service_healthy}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  admin:
+    build: ./admin
+    ports: ["4000:4000"]
+    environment:
+      NODE_ENV: development
+      API_BASE: http://caddy
+      ORIGIN: http://localhost:4000
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: admin-ui
+    depends_on:
+      vault:     {condition: service_healthy}
+      auth:      {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5

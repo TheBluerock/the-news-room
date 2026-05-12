@@ -15,18 +15,7 @@ Priority levels use Italian terms consistent with the project's cultural scope:
 ## REF-01 — ALTO: Correction service is too thin; should be absorbed into Learner
 
 **Sections:** `02-services.md`, `04-data-models.md`
-**Status:** Approved solution, pending implementation
-
-**Problem:** The correction service does exactly one thing: write a hash to Redis with a 48h TTL. This is 50 lines of code deployed as an independent service. It has its own Dockerfile, its own Vault path, its own health port, and its own consumer group. The operational overhead is not justified.
-
-**Approved solution:**
-- Move `services/correction/internal/processor/redis.go` logic into Learner as a new `fastpath` package
-- Learner consumes `editor.correction` on two separate consumer groups: one for fast-path Redis write (immediate), one for slow-path PostgreSQL update (with existing 1–6h schedule)
-- The `moderation.rejected` consumer in correction service also moves to Learner
-- Delete `services/correction/` entirely
-- Update `docker-compose.dev.yml`, Vault seed, and RedPanda consumer group setup accordingly
-
-**Benefit:** One fewer service to operate, clearer ownership (Learner owns the full correction lifecycle), simpler network topology.
+**Status:** Resolved — `services/correction/` deleted; `services/learner/internal/fastpath/` handles Redis fast-path; `services/learner/internal/consumer/run.go` consumes both `editor.correction` and `moderation.rejected`. `POST /api/corrections` HTTP endpoint added to `services/learner/internal/restapi/server.go` on `:8088`; Caddy routes `/api/corrections` → `learner:8088`. Admin corrections form now fully functional.
 
 ---
 
@@ -103,7 +92,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## PHASE4-00 — CRITICO: Analytics publisher still uses algorithmic trending scoring
 
 **Sections:** `02-services.md`, `04-data-models.md`
-**Status:** Approved, must precede PHASE4-01 and PHASE4-02
+**Status:** Resolved — migration `006_analytics_svc_schema.up.sql` creates `analytics_svc.editorial_calendar`; `services/analytics/internal/trends/publisher.go` rewritten to query due calendar entries and emit `topic.trending` with OTel trace headers; `analytics_rw` role and `search_path=analytics_svc` wired in Vault seed DSN.
 
 **Problem:** The current Analytics publisher (`services/analytics/internal/trends/publisher.go`) fetches topics from a Redis sorted set scored by published article count. This is a closed feedback loop — we cover what we already covered. There is no editorial intent, no external signal, no human decision.
 
@@ -121,24 +110,14 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## PHASE4-01 — RESOLVED: Sanity CMS integration implemented
 
 **Sections:** `03-event-flow.md`
-**Status:** Phase 4 pending
-**Prerequisites:** REF-02 (per-service DB schemas) should be completed before this — building the Sanity connector on a shared schema creates access patterns that are harder to migrate later.
-
-**Problem:** The event chain includes `article.approved → Sanity → article.published` but Sanity integration is not built. `article.approved` events are currently consumed by nothing — they accumulate in RedPanda without effect.
-
-**Approved solution (Phase 4):**
-- Build a Sanity connector service (Go) that consumes `article.approved` and calls Sanity API to create a draft document
-- Use `article.id` as the Sanity document `_id` idempotency key — safe to replay
-- Sanity webhook (on human editor publish action) calls a connector endpoint that produces `article.published`
-- `article.published` triggers analytics tracking and closes the feedback loop
-- Sanity document schema: `article` type with fields for `market`, `language`, `content`, `quality_score`, `approved_at`
+**Status:** Resolved — `services/sanity/` Go service built: consumes `article.approved`, creates `drafts.<articleId>` document via Sanity Mutations API (`createOrReplace` for idempotency); `internal/webhook/server.go` receives Sanity on-publish webhook (HMAC-SHA256 signature validation), produces `article.published` to RedPanda. Studio schemas at `studio/schemas/` (`article` + `ad`). Vault policy `infra/vault/policies/sanity.hcl`, docker-compose service, and seed secrets all wired. `frontend/src/pages/api/deploy-hook.ts` handles Vercel rebuild on Sanity publish (SVIX signature).
 
 ---
 
-## PHASE4-02 — ALTO: Public site not implemented
+## PHASE4-02 — RESOLVED: Public site implemented
 
 **Sections:** `07-auth.md`
-**Status:** Phase 4 pending
+**Status:** Resolved — Astro 6 + Svelte 5 static site at `frontend/`; i18n IT/EN/ZH; article detail and category pages; Sanity CMS integration with mock fallback; Vercel deploy webhook at `/api/deploy-hook`; newsletter via Brevo.
 
 **Problem:** No public site exists to render published articles to readers. Editors also have no UI for corrections or moderation, but that UI lives in a separate Admin app outside this repo.
 
@@ -151,7 +130,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 - No authentication, no correction form, no moderation queue — those belong to the Admin app
 - Sanity webhook → CI trigger that rebuilds the static site when `article.published` fires
 
-**Out of scope for this repo:** Admin UI (editorial dashboard, moderation queue, correction form, analytics dashboard). The admin app consumes the same gRPC/HTTP gateway but is developed and deployed independently.
+**Out of scope for public frontend:** Admin UI (editorial dashboard, moderation queue, correction form, analytics dashboard). Admin is a separate Docker service at `admin/` — see ADMIN-01.
 
 ---
 
@@ -239,6 +218,48 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 
 ---
 
+## ADMIN-01 — ALTO: Admin UI not implemented — separate Docker service required
+
+**Sections:** `02-services.md`, `07-auth.md`
+**Status:** Approved, pending implementation
+
+**Decision:** Admin UI is a separate Docker service (`admin/`) in this repo, not a Sanity Studio plugin and not an external app. Sanity Studio is the CMS layer only (article editing, image assignment). The admin app handles all operational tooling that doesn't fit Studio.
+
+**Why separate Docker, not Studio plugin:**
+- Sanity Studio plugins are limited in scope — no direct gRPC/HTTP calls to internal services
+- Moderation queue, correction form, and analytics need real-time reads from PostgreSQL and Redis
+- Audit log must be JWT-gated with Casbin RBAC (`admin` role) — Studio has no RBAC integration with our auth service
+- Keeping it in this repo means shared Vault policy, shared OTel config, single `docker-compose.dev.yml` stack
+
+**Tech stack:** SvelteKit (SSR required for auth cookie handling; team already uses Svelte in `frontend/`)
+
+**Port:** 4000 (internal), exposed via Caddy at `/admin`
+
+**Auth:** JWT RS256 from `services/auth`. Admin role required for all routes. Login page calls `POST /api/auth/login`, stores JWT in `HttpOnly` cookie. Middleware validates on every request.
+
+**Screens to implement (v1):**
+| Screen | Data source |
+|--------|-------------|
+| Moderation queue | `GET /api/moderation/queue` — lists `article.generated` events awaiting review |
+| Article correction form | `POST /api/corrections` → publishes `editor.correction` to RedPanda |
+| Editorial calendar | `GET/POST/DELETE /api/calendar/:market` — PHASE4-00 endpoint |
+| Analytics dashboard | `GET /api/analytics/market/:market` — quality scores, article counts |
+| Audit log | `GET /api/admin/audit` — paginated, filterable |
+
+**Out of scope (v1):** User management UI (Casbin rules edited via migration), Sanity content editing (stays in Studio).
+
+**Approved solution:**
+- Create `admin/` at repo root: SvelteKit app with `src/routes/`, `src/lib/`, `Dockerfile`, `.env.example`
+- `Dockerfile`: `node:22-alpine`, builds SvelteKit with `adapter-node`, exposes port 4000
+- `GET /health` endpoint returns 200 (for compose healthcheck)
+- Vault policy: `infra/vault/policies/admin.hcl` — read-only on `secret/admin/*`; JWT public key from `secret/auth/jwt-public`
+- Caddy: proxy `/admin/*` → `admin:4000`
+- OTel: `@opentelemetry/sdk-node` with OTLP HTTP exporter → Tempo
+
+**Implementation order:** Auth middleware first → audit log (simplest read-only) → moderation queue → correction form → editorial calendar → analytics dashboard.
+
+---
+
 ## OPS-02 — BASSO: Audit log not exposed in frontend
 
 **Sections:** `07-auth.md`, `08-operations.md`
@@ -246,4 +267,4 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 
 **Problem:** Audit log exists in PostgreSQL and is accessible via `GET /api/admin/audit` but there is no UI for it.
 
-**Approved solution:** Add an Audit Log page to the frontend (Phase 4), visible to admin role only. Paginated, filterable by event_type and market. No export button (security: audit data stays in the app).
+**Approved solution:** Audit Log page lives in the Admin app (`admin/`), not the public frontend. See ADMIN-01 — it is one of the v1 screens. Paginated, filterable by event_type and market. No export button (audit data stays in-app).

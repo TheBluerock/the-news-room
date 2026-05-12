@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
+	adminhttp "github.com/newsroom/analytics/internal/adminhttp"
 	grpcserver "github.com/newsroom/analytics/internal/grpc"
 	"github.com/newsroom/analytics/internal/telemetry"
 	"github.com/newsroom/analytics/internal/tracker"
@@ -93,8 +94,11 @@ func main() {
 		}
 	}()
 
+	adminSrv := adminhttp.New(db, logger)
+	adminhttp.Start(adminSrv, logger)
+
 	ready.Store(true)
-	logger.Info("analytics service ready", "grpc", ":8080", "health", ":8090")
+	logger.Info("analytics service ready", "grpc", ":8080", "admin_http", ":8081", "health", ":8090")
 
 	go func() {
 		if err := grpcSrv.Serve(lis); err != nil {
@@ -107,6 +111,7 @@ func main() {
 	grpcSrv.GracefulStop()
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	adminSrv.Shutdown(shutCtx)
 	healthSrv.Shutdown(shutCtx)
 	if telShutdown != nil {
 		telShutdown(shutCtx)

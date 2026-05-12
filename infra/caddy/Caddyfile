@@ -32,14 +32,29 @@
         reverse_proxy http://agent:8080
     }
 
-    # Analytics
+    # Analytics — REST admin API (port 8081); gRPC on 8080 is internal-only
     handle /api/analytics/* {
-        reverse_proxy http://analytics:8080
+        reverse_proxy http://analytics:8081
     }
 
-    # Admin — audit log endpoint (Admin role enforced by auth service)
+    # Admin — audit log (admin role enforced by auth service)
     handle /api/admin/* {
         reverse_proxy http://auth:8080
+    }
+
+    # Moderation HTTP API (not yet implemented — ADMIN-01)
+    handle /api/moderation/* {
+        reverse_proxy http://moderation:8080
+    }
+
+    # Editorial calendar CRUD (analytics service REST API on 8081)
+    handle /api/calendar/* {
+        reverse_proxy http://analytics:8081
+    }
+
+    # Editor corrections — learner REST HTTP on 8088
+    handle /api/corrections {
+        reverse_proxy http://learner:8088
     }
 
     # GDPR deletion
@@ -47,9 +62,9 @@
         reverse_proxy http://auth:8080
     }
 
-    # Frontend (Next.js) — catch-all
+    # Public frontend (Astro static site — dev server on 4321)
     handle {
-        reverse_proxy http://frontend:3000
+        reverse_proxy http://frontend:4321
     }
 
     # Health passthrough (for load balancer probes)

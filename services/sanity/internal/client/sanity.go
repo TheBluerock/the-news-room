@@ -30,21 +30,30 @@ func New(projectID, dataset, token string) *Client {
 	}
 }
 
+type sanitySlug struct {
+	Type    string `json:"_type"`
+	Current string `json:"current"`
+}
+
 type ArticleDoc struct {
-	ID           string   `json:"_id"`
-	Type         string   `json:"_type"`
-	ArticleID    string   `json:"articleId"`
-	Market       string   `json:"market"`
-	Language     string   `json:"language"`
-	Content      string   `json:"content"`
-	Title        string   `json:"title"`
-	Excerpt      string   `json:"excerpt"`
-	Section      string   `json:"section"`
-	Author       string   `json:"author"`
-	Tags         []string `json:"tags"`
-	Slug         string   `json:"slug"`
-	QualityScore float64  `json:"qualityScore"`
-	ApprovedAt   string   `json:"approvedAt"`
+	ID           string      `json:"_id"`
+	Type         string      `json:"_type"`
+	ArticleID    string      `json:"articleId"`
+	Market       string      `json:"market"`
+	Language     string      `json:"language"`
+	Content      string      `json:"content"`
+	Title        string      `json:"title"`
+	Excerpt      string      `json:"excerpt"`
+	Section      string      `json:"section"`
+	Byline       string      `json:"byline"`
+	Tags         []string    `json:"tags"`
+	Slug         sanitySlug  `json:"slug"`
+	QualityScore float64     `json:"qualityScore"`
+	ApprovedAt   string      `json:"approvedAt"`
+}
+
+func NewSlug(current string) sanitySlug {
+	return sanitySlug{Type: "slug", Current: current}
 }
 
 // CreateDraft upserts a Sanity draft document for the article.

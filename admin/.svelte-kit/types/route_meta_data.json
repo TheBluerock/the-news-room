@@ -1,0 +1,37 @@
+{
+	"/": [
+		"src/routes/+page.server.ts",
+		"src/routes/+layout.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/analytics": [
+		"src/routes/analytics/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/api/health": [
+		"src/routes/api/health/+server.ts"
+	],
+	"/audit": [
+		"src/routes/audit/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/calendar": [
+		"src/routes/calendar/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/corrections": [
+		"src/routes/corrections/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/login": [
+		"src/routes/login/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	],
+	"/logout": [
+		"src/routes/logout/+server.ts"
+	],
+	"/moderation": [
+		"src/routes/moderation/+page.server.ts",
+		"src/routes/+layout.server.ts"
+	]
+}

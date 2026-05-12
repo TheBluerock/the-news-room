@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -23,6 +21,7 @@ import (
 	"github.com/newsroom/learner/internal/db"
 	grpcserver "github.com/newsroom/learner/internal/grpc"
 	"github.com/newsroom/learner/internal/health"
+	"github.com/newsroom/learner/internal/restapi"
 	"github.com/newsroom/learner/internal/telemetry"
 	"github.com/newsroom/learner/internal/vault"
 )
@@ -93,12 +92,12 @@ func main() {
 	grpcSrv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	learnerv1.RegisterLearnerServiceServer(grpcSrv, grpcserver.New(pool, rdb, openAIKey))
 
-	// HTTP REST endpoint for frontend: GET /suggestions?market=italy&limit=10
-	// Exposed on port 8088 so Caddy can route /api/suggestions/* to it.
-	suggestionsSrv := startSuggestionsServer(pool)
+	// HTTP REST: GET /suggestions + POST /api/corrections — port 8088
+	restSrv := restapi.New(pool, rdb, logger)
+	restapi.Start(restSrv, logger)
 
 	ready.Store(true)
-	logger.Info("learner server ready", "grpc", ":8080", "health", ":8090", "suggestions_http", ":8088")
+	logger.Info("learner server ready", "grpc", ":8080", "rest_http", ":8088", "health", ":8090")
 
 	go func() {
 		if err := grpcSrv.Serve(lis); err != nil {
@@ -112,39 +111,9 @@ func main() {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	healthSrv.Shutdown(shutCtx)
-	suggestionsSrv.Shutdown(shutCtx)
+	restSrv.Shutdown(shutCtx)
 	if telShutdown != nil {
 		telShutdown(shutCtx)
 	}
 }
 
-func startSuggestionsServer(pool *pgxpool.Pool) *http.Server {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/suggestions", func(w http.ResponseWriter, r *http.Request) {
-		market := r.URL.Query().Get("market")
-		if market == "" {
-			http.Error(w, `{"error":"market required"}`, http.StatusBadRequest)
-			return
-		}
-		limit := 10
-		if l := r.URL.Query().Get("limit"); l != "" {
-			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 50 {
-				limit = n
-			}
-		}
-		rows, err := db.GetTopicSuggestions(r.Context(), pool, market, limit)
-		if err != nil {
-			http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(rows)
-	})
-	srv := &http.Server{Addr: ":8088", Handler: mux}
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("suggestions server error", "err", err)
-		}
-	}()
-	return srv
-}

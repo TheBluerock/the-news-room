@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ func NewHTTP(
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.HandleFunc("POST /api/auth/refresh", s.refresh)
 	mux.HandleFunc("GET /internal/verify", s.verify)
+	mux.HandleFunc("GET /api/admin/audit", s.auditLog)
 	return mux
 }
 
@@ -152,6 +154,85 @@ func (s *HTTPServer) verify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-User-Market", claims.Market)
 	w.Header().Set("X-User-Role", claims.Role)
 	w.WriteHeader(http.StatusOK)
+}
+
+// auditLog returns paginated audit_log rows. Requires X-User-Role: admin (set by Caddy forward_auth).
+func (s *HTTPServer) auditLog(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-User-Role") != "admin" {
+		writeErr(w, http.StatusForbidden, "admin role required")
+		return
+	}
+
+	q := r.URL.Query()
+	action := q.Get("event_type")
+	market := q.Get("market")
+	page := 1
+	limit := 25
+	if v := q.Get("page"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			page = n
+		}
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	offset := (page - 1) * limit
+
+	rows, err := s.db.Query(r.Context(), `
+		SELECT id::text, timestamp, user_id::text, action, resource_id::text,
+		       COALESCE(market, ''), COALESCE(old_value::text, '{}'), COALESCE(new_value::text, '{}')
+		FROM audit_log
+		WHERE ($1 = '' OR action = $1)
+		  AND ($2 = '' OR market = $2)
+		ORDER BY timestamp DESC
+		LIMIT $3 OFFSET $4
+	`, action, market, limit, offset)
+	if err != nil {
+		s.logger.Error("audit log query", "err", err)
+		writeErr(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	defer rows.Close()
+
+	type entry struct {
+		ID         string `json:"id"`
+		CreatedAt  string `json:"created_at"`
+		ActorID    string `json:"actor_id"`
+		EventType  string `json:"event_type"`
+		ResourceID string `json:"resource_id"`
+		Market     string `json:"market"`
+		OldValue   string `json:"old_value,omitempty"`
+		NewValue   string `json:"new_value,omitempty"`
+	}
+
+	var entries []entry
+	for rows.Next() {
+		var e entry
+		var ts time.Time
+		if err := rows.Scan(&e.ID, &ts, &e.ActorID, &e.EventType, &e.ResourceID, &e.Market, &e.OldValue, &e.NewValue); err != nil {
+			continue
+		}
+		e.CreatedAt = ts.UTC().Format(time.RFC3339)
+		entries = append(entries, e)
+	}
+
+	var total int
+	s.db.QueryRow(r.Context(), `
+		SELECT COUNT(*) FROM audit_log
+		WHERE ($1 = '' OR action = $1) AND ($2 = '' OR market = $2)
+	`, action, market).Scan(&total)
+
+	if entries == nil {
+		entries = []entry{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"entries": entries,
+		"total":   total,
+		"page":    page,
+		"limit":   limit,
+	})
 }
 
 func resolveRole(e *casbin.Enforcer, email string) string {

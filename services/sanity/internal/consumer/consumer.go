@@ -127,9 +127,9 @@ func handle(ctx context.Context, data []byte, sanityClient *client.Client, logge
 		Title:        evt.Title,
 		Excerpt:      evt.Excerpt,
 		Section:      evt.Section,
-		Author:       evt.Author,
+		Byline:       evt.Author,
 		Tags:         evt.Tags,
-		Slug:         evt.Slug,
+		Slug:         client.NewSlug(evt.Slug),
 		QualityScore: evt.QualityScore,
 		ApprovedAt:   evt.Timestamp,
 	}

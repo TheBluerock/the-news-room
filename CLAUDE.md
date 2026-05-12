@@ -21,7 +21,8 @@ newsroom/
 │   ├── moderation/   # Python — cultural/factual checks, gating
 │   ├── correction/   # Golang — fast path Redis corrections, 48h TTL
 │   └── analytics/    # Golang — trend detection, quality scoring
-├── frontend/         # Astro + Svelte, static-generated articles, i18n (IT/EN/ZH), hosted on Vercel. Admin UI is a separate app (not in this repo).
+├── frontend/         # Astro + Svelte, static-generated articles, i18n (IT/EN/ZH), hosted on Vercel. Public site only — no auth, no admin.
+├── admin/            # SvelteKit — editorial dashboard, moderation queue, correction form, analytics, audit log. Separate Docker service. JWT-gated (admin role).
 ├── proto/            # Shared gRPC definitions
 ├── infra/
 │   ├── terraform/

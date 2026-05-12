@@ -11,6 +11,7 @@ from openai import OpenAI
 from opentelemetry import propagate, trace
 
 import checks
+import db as dbmod
 
 logger = logging.getLogger("moderation.consumer")
 tracer = trace.get_tracer("moderation.consumer")
@@ -87,10 +88,39 @@ def _process(event: dict, openai_client: OpenAI, producer: Producer, dlq_produce
         headers = [(k, v.encode()) for k, v in out_carrier.items()]
 
         if passed:
+            status = "auto_approved"
             _publish_approved(producer, event, quality, trace_id, headers)
         else:
+            status = "auto_rejected"
             reason = cultural_reason if not cultural_ok else (", ".join(issues) or "quality too low")
             _publish_rejected(producer, article_id, market, reason, cultural_ok, factual_ok, quality, trace_id, headers)
+
+        _save_to_queue(
+            article_id=article_id,
+            market=market,
+            topic=event.get("topic_name", event.get("title", "")),
+            status=status,
+            quality=quality,
+            cultural_ok=cultural_ok,
+            factual_ok=factual_ok,
+            rejection_reasons=issues if not passed else [],
+        )
+
+
+def _save_to_queue(
+    article_id: str, market: str, topic: str, status: str,
+    quality: float, cultural_ok: bool, factual_ok: bool, rejection_reasons: list,
+) -> None:
+    try:
+        dbmod.execute(
+            """INSERT INTO moderation_svc.review_queue
+               (article_id, market, topic, status, quality_score, cultural_ok, factual_ok, rejection_reasons)
+               VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT DO NOTHING""",
+            (article_id, market, topic, status, quality, cultural_ok, factual_ok, rejection_reasons),
+        )
+    except Exception as e:
+        logger.warning("failed to save to review_queue: %s", e)
 
 
 def _publish_approved(producer, event, quality, trace_id, headers):
