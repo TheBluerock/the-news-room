@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: {go-version: "1.22"}
+        with: {go-version: "1.26"}
       - name: Test (with race detector)
         run: cd services/sanity && go test -race -coverprofile=coverage.out ./...
       - name: Check coverage ≥ 75%
@@ -51,38 +51,21 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
-  deploy-staging:
+  deploy:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: staging
-    steps:
-      - uses: actions/checkout@v4
-      - name: Fetch Sanity credentials from Vault
-        uses: hashicorp/vault-action@v3
-        with:
-          url: ${{ secrets.VAULT_ADDR }}
-          token: ${{ secrets.VAULT_TOKEN }}
-          secrets: |
-            secret/data/newsroom/sanity sanity_token | SANITY_TOKEN
-            secret/data/newsroom/sanity sanity_dataset | SANITY_DATASET
-      - name: Deploy to staging
-        run: |
-          helm upgrade --install newsroom-sanity infra/helm/newsroom \
-            --set service=sanity \
-            --set image.tag=${{ needs.build.outputs.image_tag }} \
-            --namespace staging --wait
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    needs: [deploy-staging, build]
-    runs-on: ubuntu-latest
-    environment:
       name: production
     steps:
-      - name: Canary deploy (Argo Rollouts — 5%→50%→100%, auto-rollback)
-        run: |
-          kubectl argo rollouts set image newsroom-sanity \
-            sanity=${{ needs.build.outputs.image_tag }} \
-            --namespace production
+      - name: Deploy to Swarm
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SWARM_HOST }}
+          username: ${{ secrets.SWARM_USER }}
+          key: ${{ secrets.SWARM_SSH_KEY }}
+          script: |
+            docker service update \
+              --image ${{ needs.build.outputs.image_tag }} \
+              --update-order start-first \
+              newsroom_sanity

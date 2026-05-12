@@ -1,6 +1,6 @@
 module github.com/newsroom/auth
 
-go 1.25.0
+go 1.26.3
 
 require (
 	github.com/casbin/casbin/v2 v2.89.0

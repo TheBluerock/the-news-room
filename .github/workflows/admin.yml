@@ -50,36 +50,21 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
-  deploy-staging:
+  deploy:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
-      name: staging
-    steps:
-      - uses: actions/checkout@v4
-      - name: Fetch JWT public key from Vault
-        uses: hashicorp/vault-action@v3
-        with:
-          url: ${{ secrets.VAULT_ADDR }}
-          token: ${{ secrets.VAULT_TOKEN }}
-          secrets: secret/data/newsroom/auth jwt_public_key | JWT_PUBLIC_KEY
-      - name: Deploy to staging
-        run: |
-          helm upgrade --install newsroom-admin infra/helm/newsroom \
-            --set service=admin \
-            --set image.tag=${{ needs.build.outputs.image_tag }} \
-            --namespace staging --wait
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    needs: [deploy-staging, build]
-    runs-on: ubuntu-latest
-    environment:
       name: production
     steps:
-      - name: Canary deploy (Argo Rollouts — 5%→50%→100%, auto-rollback)
-        run: |
-          kubectl argo rollouts set image newsroom-admin \
-            admin=${{ needs.build.outputs.image_tag }} \
-            --namespace production
+      - name: Deploy to Swarm
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SWARM_HOST }}
+          username: ${{ secrets.SWARM_USER }}
+          key: ${{ secrets.SWARM_SSH_KEY }}
+          script: |
+            docker service update \
+              --image ${{ needs.build.outputs.image_tag }} \
+              --update-order start-first \
+              newsroom_admin

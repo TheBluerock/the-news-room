@@ -278,16 +278,18 @@ services:
         constraints: [node.labels.role == app]
       <<: *app-deploy
 
-  agent:
+  agent-italy:
     image: ${REGISTRY}/newsroom/agent:${TAG}
     <<: *vault-entrypoint
     command: ["/agent"]
     environment:
+      AGENT_MARKET: italy
       VAULT_ADDR: ${VAULT_ADDR}
       LEARNER_ADDR: learner:8080
+      LEARNER_REST_ADDR: learner:8088
       ANALYTICS_ADDR: analytics:8080
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
-      OTEL_SERVICE_NAME: agent
+      OTEL_SERVICE_NAME: agent-italy
     secrets:
       - source: vault_role_id_agent
         target: /run/secrets/vault_role_id
@@ -295,7 +297,61 @@ services:
         target: /run/secrets/vault_secret_id
     networks: [newsroom_net]
     deploy:
-      replicas: 2
+      replicas: 1
+      resources:
+        limits:   {cpus: "1.0", memory: 512M}
+        reservations: {cpus: "0.25", memory: 128M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  agent-usa:
+    image: ${REGISTRY}/newsroom/agent:${TAG}
+    <<: *vault-entrypoint
+    command: ["/agent"]
+    environment:
+      AGENT_MARKET: usa
+      VAULT_ADDR: ${VAULT_ADDR}
+      LEARNER_ADDR: learner:8080
+      LEARNER_REST_ADDR: learner:8088
+      ANALYTICS_ADDR: analytics:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: agent-usa
+    secrets:
+      - source: vault_role_id_agent
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_agent
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "1.0", memory: 512M}
+        reservations: {cpus: "0.25", memory: 128M}
+      placement:
+        constraints: [node.labels.role == app]
+      <<: *app-deploy
+
+  agent-china:
+    image: ${REGISTRY}/newsroom/agent:${TAG}
+    <<: *vault-entrypoint
+    command: ["/agent"]
+    environment:
+      AGENT_MARKET: china
+      VAULT_ADDR: ${VAULT_ADDR}
+      LEARNER_ADDR: learner:8080
+      LEARNER_REST_ADDR: learner:8088
+      ANALYTICS_ADDR: analytics:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: agent-china
+    secrets:
+      - source: vault_role_id_agent
+        target: /run/secrets/vault_role_id
+      - source: vault_secret_id_agent
+        target: /run/secrets/vault_secret_id
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
       resources:
         limits:   {cpus: "1.0", memory: 512M}
         reservations: {cpus: "0.25", memory: 128M}

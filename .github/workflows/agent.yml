@@ -49,30 +49,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
-  deploy-staging:
-    # Single image deployed as three market-scoped services (AGENT_MARKET env var)
+  deploy:
+    # Single image deployed as three market-scoped Swarm services (AGENT_MARKET env var)
     if: github.ref == 'refs/heads/main'
     needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-    strategy:
-      matrix:
-        market: [italy, usa, china]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy agent-${{ matrix.market }} to staging
-        run: |
-          helm upgrade --install newsroom-agent-${{ matrix.market }} infra/helm/newsroom \
-            --set service=agent \
-            --set nameOverride=agent-${{ matrix.market }} \
-            --set image.tag=${{ needs.build.outputs.image_tag }} \
-            --set env.AGENT_MARKET=${{ matrix.market }} \
-            --namespace staging --wait
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    needs: [deploy-staging, build]
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -80,8 +60,14 @@ jobs:
       matrix:
         market: [italy, usa, china]
     steps:
-      - name: Canary deploy agent-${{ matrix.market }} (Argo Rollouts — 5%→50%→100%)
-        run: |
-          kubectl argo rollouts set image newsroom-agent-${{ matrix.market }} \
-            agent=${{ needs.build.outputs.image_tag }} \
-            --namespace production
+      - name: Deploy agent-${{ matrix.market }} to Swarm
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SWARM_HOST }}
+          username: ${{ secrets.SWARM_USER }}
+          key: ${{ secrets.SWARM_SSH_KEY }}
+          script: |
+            docker service update \
+              --image ${{ needs.build.outputs.image_tag }} \
+              --update-order start-first \
+              newsroom_agent-${{ matrix.market }}
