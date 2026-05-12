@@ -3,3 +3,5 @@
 # This workflow is intentionally disabled — see learner.yml for the active pipeline.
 #
 # Retained as a tombstone to prevent accidental recreation of the correction service.
+name: Correction Service (DISSOLVED — REF-01)
+on: {}

@@ -263,3 +263,61 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 **Sections:** `07-auth.md`, `08-operations.md`
 **Status:** Resolved — Audit Log lives in the Admin app at `admin/src/routes/audit/`. Paginated, filterable by event_type and market. `GET /api/admin/audit` implemented in `services/auth/internal/server/http.go` (`auditLog()` method, admin role enforced). Not on public frontend by design.
 
+---
+
+## COST-01 — MEDIO: LLM token usage and cost not tracked
+
+**Sections:** `services/agent/`, `services/analytics/`, `services/moderation/`, `proto/`, `infra/migrations/`
+**Status:** Pending
+
+No token consumption or cost data is captured anywhere. OpenAI responses include `usage` on every call — currently discarded. Key metric: `quality_per_1k_tokens` (editorial quality / token spend) — the primary efficiency signal for LLM budget decisions.
+
+**Approved approach (to be implemented):**
+
+Pipeline change — token data flows alongside article from generation to storage:
+1. `services/agent/pipeline.py` — `generate` node reads `response.usage` (`prompt_tokens`, `completion_tokens`, `model`) from OpenAI response, stores in `ArticleState`.
+2. `services/agent/pipeline/publisher.py` — includes `prompt_tokens`, `completion_tokens`, `model` in `article.generated` payload.
+3. `services/moderation/consumer.py` — forwards token fields through `article.approved` event and passes to `RecordQualityScore` gRPC call.
+4. `proto/analytics.proto` — adds `prompt_tokens`, `completion_tokens`, `model` to `QualityRequest` message.
+5. Analytics gRPC handler — computes `cost_usd` from static model pricing table (see below), computes `quality_per_1k_tokens`, stores all in `article_performance`, emits Prometheus metrics.
+6. Migration `009_article_cost_tracking.up.sql` — adds `prompt_tokens INT`, `completion_tokens INT`, `model TEXT`, `cost_usd NUMERIC(10,6)`, `quality_per_1k_tokens FLOAT` columns to `analytics_svc.article_performance`.
+
+**Model pricing table** (static map in analytics service, update as pricing changes):
+```go
+var pricePerMToken = map[string][2]float64{
+    // [input $/1M tokens, output $/1M tokens]
+    "gpt-4o":            {2.50, 10.00},
+    "claude-sonnet-4-6": {3.00, 15.00},
+}
+```
+
+**Prometheus metrics** emitted by analytics on `RecordQualityScore`:
+```
+llm_tokens_total{market, model, type="prompt|completion"}  # counter
+llm_cost_usd_total{market, model}                          # counter
+article_quality_per_1k_tokens{market, model}               # gauge
+```
+
+**Grafana panels** (add to existing newsroom dashboard):
+- Tokens per article by market/model (time series)
+- Cumulative cost per market (stat panel, daily/weekly/monthly)
+- Quality per 1k tokens heatmap (market × model)
+- Cost efficiency trend: is quality improving as cost rises or holding flat?
+
+---
+
+## SEARCH-01 — MEDIO: Algolia search not implemented
+
+**Sections:** `frontend/`, `admin/`
+**Status:** Pending
+
+Public frontend needs full-text article search across all three markets (Italy/USA/China), multi-language (IT/EN/ZH). Admin moderation queue may also benefit from search.
+
+**Approved approach (to be implemented):**
+- Use Algolia as search backend. Index: one index per market (`articles_italy`, `articles_usa`, `articles_china`) or a single index with `market` as a facet attribute.
+- Indexing trigger: when `article.published` event is consumed by a new Algolia indexer (can run inside the Sanity connector or as a separate lightweight consumer). Payload: `article_id`, `title`, `excerpt`, `content` (truncated), `market`, `language`, `tags`, `slug`, `published_at`.
+- Frontend (`frontend/`): Algolia InstantSearch (Svelte adapter) or plain `algoliasearch` client. Search bar on public site. Read-only search API key exposed to browser.
+- Admin (`admin/`): optional — moderation queue filtering already uses DB queries; Algolia not required there.
+- Secrets: Algolia App ID + Admin API key stored in Vault at `secret/algolia`. Read-only Search API key safe to expose in frontend env.
+- On article deletion / GDPR `user.data.deletion.requested`: delete record from Algolia index by `article_id`.
+

@@ -55,7 +55,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    environment: staging
+    environment:
+      name: staging
     steps:
       - uses: actions/checkout@v4
       - name: Fetch Sanity credentials from Vault
@@ -75,9 +76,10 @@ jobs:
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
-    needs: deploy-staging
+    needs: [deploy-staging, build]
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: production
     steps:
       - name: Canary deploy (Argo Rollouts — 5%→50%→100%, auto-rollback)
         run: |

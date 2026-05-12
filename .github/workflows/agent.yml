@@ -54,7 +54,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    environment: staging
+    environment:
+      name: staging
     strategy:
       matrix:
         market: [italy, usa, china]
@@ -71,9 +72,10 @@ jobs:
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
-    needs: deploy-staging
+    needs: [deploy-staging, build]
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: production
     strategy:
       matrix:
         market: [italy, usa, china]
