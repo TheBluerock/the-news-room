@@ -18,6 +18,7 @@ from pipeline import (
     llm,
     memory,
     publisher,
+    quality,
     rate_limit,
     semantic,
 )
@@ -53,6 +54,7 @@ class ArticleState(TypedDict):
     trace_id: str
     rdb: redis_lib.Redis
     learner_channel: grpc.Channel
+    learner_rest_url: str
     analytics_channel: grpc.Channel
     producer: Producer
     openai_client: object
@@ -60,6 +62,7 @@ class ArticleState(TypedDict):
     memory: dict
     corrections_data: dict
     context: list
+    quality_summary: dict
     prompt: str
     content: str
     title: str
@@ -78,6 +81,7 @@ def build_graph() -> StateGraph:
     graph.add_node("fetch_corrections", _fetch_corrections)
     graph.add_node("fetch_context", _fetch_context)
     graph.add_node("semantic_search", _semantic_search)
+    graph.add_node("fetch_quality_summary", _fetch_quality_summary)
     graph.add_node("check_rate_limit", _check_rate_limit)
     graph.add_node("check_circuit", _check_circuit)
     graph.add_node("build_prompt", _build_prompt)
@@ -89,7 +93,8 @@ def build_graph() -> StateGraph:
     graph.add_edge("fetch_memory", "fetch_corrections")
     graph.add_edge("fetch_corrections", "fetch_context")
     graph.add_edge("fetch_context", "semantic_search")
-    graph.add_edge("semantic_search", "check_rate_limit")
+    graph.add_edge("semantic_search", "fetch_quality_summary")
+    graph.add_edge("fetch_quality_summary", "check_rate_limit")
     graph.add_edge("check_rate_limit", "check_circuit")
     graph.add_edge("check_circuit", "build_prompt")
     graph.add_edge("build_prompt", "generate")
@@ -120,6 +125,11 @@ def _semantic_search(state: ArticleState) -> dict:
     return {"context": state.get("context", []) + results}
 
 
+def _fetch_quality_summary(state: ArticleState) -> dict:
+    summary = quality.fetch(state["learner_rest_url"], state["market"])
+    return {"quality_summary": summary}
+
+
 def _check_rate_limit(state: ArticleState) -> dict:
     if not rate_limit.acquire(state["rdb"], state["market"]):
         raise RuntimeError(f"LLM rate limit exceeded for market={state['market']}")
@@ -138,6 +148,7 @@ def _build_prompt(state: ArticleState) -> dict:
     system = MARKET_SYSTEM_PROMPTS[state["market"]]
     corrs = state.get("corrections_data", {})
     ctx = state.get("context", [])
+    qs = state.get("quality_summary", {})
 
     parts = [system]
     if corrs:
@@ -146,6 +157,13 @@ def _build_prompt(state: ArticleState) -> dict:
     if ctx:
         snippets = "\n".join(f"- {n.get('content', '')[:150]}" for n in ctx[:3])
         parts.append(f"\nRELEVANT CONTEXT:\n{snippets}")
+    if qs:
+        avg = qs.get("avg_quality_score", 0.5)
+        rejections = qs.get("top_rejections", [])
+        quality_line = f"Recent quality average for {state['market']}: {avg:.2f}/1.0."
+        if rejections:
+            quality_line += f" Avoid: {'; '.join(rejections[:3])}."
+        parts.append(f"\nQUALITY SIGNAL:\n{quality_line}")
 
     return {"prompt": "\n".join(parts) + f"\n\nTopic: {state['topic_name']}"}
 

@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
         redis_addr = vaultpkg.require(secrets, "redis_addr")
         redpanda_brokers = vaultpkg.require(secrets, "redpanda_brokers")
         learner_addr = os.getenv("LEARNER_ADDR", "learner:8080")
+        learner_rest_url = "http://" + os.getenv("LEARNER_REST_ADDR", "learner:8088")
         analytics_addr = os.getenv("ANALYTICS_ADDR", "analytics:8080")
         logger.info("agent secrets loaded from Vault")
     except Exception as e:
@@ -50,8 +51,8 @@ async def lifespan(app: FastAPI):
     _stop.clear()
     t = threading.Thread(
         target=consumer_mod.run,
-        args=(redpanda_brokers, rdb, learner_channel, analytics_channel,
-              producer, openai_client, anthropic_client, _stop),
+        args=(redpanda_brokers, rdb, learner_channel, learner_rest_url,
+              analytics_channel, producer, openai_client, anthropic_client, _stop),
         daemon=True,
     )
     t.start()

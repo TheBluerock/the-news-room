@@ -37,19 +37,29 @@ jobs:
       - uses: docker/build-push-action@v6
         with: {context: services/moderation, push: true, tags: "${{ steps.meta.outputs.tags }}"}
 
-  deploy-staging:
+  migrate-and-deploy:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      - run: helm upgrade --install newsroom-moderation infra/helm/newsroom --set service=moderation --set image.tag=${{ needs.build.outputs.image_tag }} --namespace staging --wait
+      - name: Fetch DB credentials from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ secrets.VAULT_ADDR }}
+          token: ${{ secrets.VAULT_TOKEN }}
+          secrets: secret/data/newsroom/moderation postgres_dsn | DB_URL
+      - name: Run migrations (blocks deploy on failure)
+        run: make migrate-up ENV=staging
+      - name: Deploy to staging
+        run: helm upgrade --install newsroom-moderation infra/helm/newsroom --set service=moderation --set image.tag=${{ needs.build.outputs.image_tag }} --namespace staging --wait
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
-    needs: deploy-staging
+    needs: migrate-and-deploy
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - run: kubectl argo rollouts set image newsroom-moderation moderation=${{ needs.build.outputs.image_tag }} --namespace production
+      - name: Canary deploy (Argo Rollouts — 5%→50%→100%, auto-rollback)
+        run: kubectl argo rollouts set image newsroom-moderation moderation=${{ needs.build.outputs.image_tag }} --namespace production

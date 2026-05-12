@@ -26,6 +26,7 @@ func New(pool *pgxpool.Pool, rdb *redis.Client, logger *slog.Logger) *http.Serve
 	s := &Server{pool: pool, rdb: rdb, logger: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /suggestions", s.suggestions)
+	mux.HandleFunc("GET /api/quality-summary", s.qualitySummary)
 	mux.HandleFunc("POST /api/corrections", s.corrections)
 	srv := &http.Server{
 		Addr:         ":8088",
@@ -66,6 +67,21 @@ func (s *Server) suggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) qualitySummary(w http.ResponseWriter, r *http.Request) {
+	market := r.URL.Query().Get("market")
+	if !validMarkets[market] {
+		writeErr(w, http.StatusBadRequest, "valid market required")
+		return
+	}
+	summary, err := db.GetMarketQualitySummary(r.Context(), s.pool, market)
+	if err != nil {
+		s.logger.Error("quality summary query", "err", err)
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }
 
 type correctionReq struct {

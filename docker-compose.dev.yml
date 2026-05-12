@@ -102,9 +102,11 @@ services:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
     depends_on:
-      auth: {condition: service_healthy}
-      agent: {condition: service_healthy}
-      analytics: {condition: service_healthy}
+      auth:         {condition: service_healthy}
+      agent-italy:  {condition: service_healthy}
+      agent-usa:    {condition: service_healthy}
+      agent-china:  {condition: service_healthy}
+      analytics:    {condition: service_healthy}
 
   # ── Services ────────────────────────────────────────────────────────────────
 
@@ -172,19 +174,73 @@ services:
       timeout: 5s
       retries: 5
 
-  agent:
+  agent-italy:
     build: ./services/agent
     ports: ["8083:8080", "8092:8090"]
     environment:
+      AGENT_MARKET: italy
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-root-token
       REDIS_ADDR: redis:6379
       REDPANDA_BROKERS: redpanda:29092
       SCHEMA_REGISTRY_URL: http://redpanda:8081
       LEARNER_ADDR: learner:8080
+      LEARNER_REST_ADDR: learner:8088
       ANALYTICS_ADDR: analytics:8080
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
-      OTEL_SERVICE_NAME: agent
+      OTEL_SERVICE_NAME: agent-italy
+    depends_on:
+      redis:     {condition: service_healthy}
+      vault:     {condition: service_healthy}
+      redpanda:  {condition: service_healthy}
+      learner:   {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  agent-usa:
+    build: ./services/agent
+    ports: ["8097:8080", "8098:8090"]
+    environment:
+      AGENT_MARKET: usa
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      REDIS_ADDR: redis:6379
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      LEARNER_ADDR: learner:8080
+      LEARNER_REST_ADDR: learner:8088
+      ANALYTICS_ADDR: analytics:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: agent-usa
+    depends_on:
+      redis:     {condition: service_healthy}
+      vault:     {condition: service_healthy}
+      redpanda:  {condition: service_healthy}
+      learner:   {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  agent-china:
+    build: ./services/agent
+    ports: ["8099:8080", "8100:8090"]
+    environment:
+      AGENT_MARKET: china
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-root-token
+      REDIS_ADDR: redis:6379
+      REDPANDA_BROKERS: redpanda:29092
+      SCHEMA_REGISTRY_URL: http://redpanda:8081
+      LEARNER_ADDR: learner:8080
+      LEARNER_REST_ADDR: learner:8088
+      ANALYTICS_ADDR: analytics:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_SERVICE_NAME: agent-china
     depends_on:
       redis:     {condition: service_healthy}
       vault:     {condition: service_healthy}

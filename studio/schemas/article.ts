@@ -88,6 +88,7 @@ export const article = defineType({
       type: 'image',
       options: { hotspot: true },
       description: 'Assign before publishing. Required for article pages.',
+      validation: R => R.custom(v => v ? true : { level: 'warning', message: 'Cover image missing — assign before publishing.' }),
       fields: [
         defineField({
           name: 'alt',

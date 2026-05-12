@@ -84,15 +84,19 @@ func GetJournalistProfile(ctx context.Context, pool *pgxpool.Pool, id string) (*
 func SearchSimilar(ctx context.Context, pool *pgxpool.Pool, market string, queryVec []float32, limit int) ([]KnowledgeNode, error) {
 	vec := pgvector.NewVector(queryVec)
 
+	// JOIN article_performance to weight results by editorial quality score.
+	// Articles with no recorded quality default to 0.5 (neutral).
 	rows, err := pool.Query(ctx, `
-		SELECT article_id::text, 'article' AS type,
+		SELECT ae.article_id::text, 'article' AS type,
 		       '' AS content,
-		       (1 - (embedding <=> $1))::float4 AS weight
-		FROM learner_svc.article_embeddings
-		WHERE market = $2
-		  AND stale = false
-		  AND embedding IS NOT NULL
-		ORDER BY embedding <=> $1
+		       ((1 - (ae.embedding <=> $1)) * COALESCE(ap.quality_score, 0.5))::float4 AS weight
+		FROM learner_svc.article_embeddings ae
+		LEFT JOIN analytics_svc.article_performance ap
+		       ON ap.article_id = ae.article_id
+		WHERE ae.market = $2
+		  AND ae.stale = false
+		  AND ae.embedding IS NOT NULL
+		ORDER BY ae.embedding <=> $1
 		LIMIT $3
 	`, vec, market, limit)
 	if err != nil {
@@ -163,6 +167,51 @@ func SearchFullText(ctx context.Context, pool *pgxpool.Pool, market, query strin
 		results = append(results, n)
 	}
 	return results, nil
+}
+
+// QualitySummary holds market-level quality signal for the agent prompt.
+type QualitySummary struct {
+	Market            string
+	AvgQualityScore   float64
+	ArticleCount30d   int
+	TopRejections     []string
+}
+
+// GetMarketQualitySummary queries article_performance and learner rejections to
+// produce a quality signal for a given market, used in agent prompt construction.
+func GetMarketQualitySummary(ctx context.Context, pool *pgxpool.Pool, market string) (*QualitySummary, error) {
+	s := &QualitySummary{Market: market}
+
+	err := pool.QueryRow(ctx, `
+		SELECT COALESCE(AVG(quality_score), 0.5), COUNT(*)
+		FROM analytics_svc.article_performance
+		WHERE market = $1
+		  AND created_at >= now() - INTERVAL '30 days'
+	`, market).Scan(&s.AvgQualityScore, &s.ArticleCount30d)
+	if err != nil {
+		return nil, fmt.Errorf("quality summary query: %w", err)
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT reason
+		FROM learner_svc.rejections
+		WHERE market = $1
+		  AND logged_at >= now() - INTERVAL '30 days'
+		GROUP BY reason
+		ORDER BY COUNT(*) DESC
+		LIMIT 5
+	`, market)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var reason string
+			if rows.Scan(&reason) == nil {
+				s.TopRejections = append(s.TopRejections, reason)
+			}
+		}
+	}
+
+	return s, nil
 }
 
 // LogCorrection writes a correction to the slow-path PostgreSQL log.

@@ -18,6 +18,11 @@ jobs:
       - uses: actions/setup-go@v5
         with: {go-version: "1.22"}
       - run: cd services/analytics && go test -race -coverprofile=coverage.out ./...
+      - name: Check coverage ≥ 75%
+        run: |
+          cd services/analytics
+          coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          awk "BEGIN{exit ($coverage < 75)}" || (echo "Coverage $coverage% < 75%" && exit 1)
       - uses: golangci/golangci-lint-action@v6
         with: {working-directory: services/analytics}
 

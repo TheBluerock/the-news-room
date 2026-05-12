@@ -50,16 +50,23 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
 
   deploy-staging:
+    # Single image deployed as three market-scoped services (AGENT_MARKET env var)
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment: staging
+    strategy:
+      matrix:
+        market: [italy, usa, china]
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          helm upgrade --install newsroom-agent infra/helm/newsroom \
+      - name: Deploy agent-${{ matrix.market }} to staging
+        run: |
+          helm upgrade --install newsroom-agent-${{ matrix.market }} infra/helm/newsroom \
             --set service=agent \
+            --set nameOverride=agent-${{ matrix.market }} \
             --set image.tag=${{ needs.build.outputs.image_tag }} \
+            --set env.AGENT_MARKET=${{ matrix.market }} \
             --namespace staging --wait
 
   deploy-production:
@@ -67,9 +74,12 @@ jobs:
     needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
+    strategy:
+      matrix:
+        market: [italy, usa, china]
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          kubectl argo rollouts set image newsroom-agent \
+      - name: Canary deploy agent-${{ matrix.market }} (Argo Rollouts — 5%→50%→100%)
+        run: |
+          kubectl argo rollouts set image newsroom-agent-${{ matrix.market }} \
             agent=${{ needs.build.outputs.image_tag }} \
             --namespace production

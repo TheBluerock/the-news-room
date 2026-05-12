@@ -57,7 +57,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## REF-04 — ALTO: No Docker Swarm stack files — infrastructure target not implemented
 
 **Sections:** `06-infrastructure.md`
-**Status:** Approved, pending implementation
+**Status:** Resolved — `infra/swarm/stack.dev.yml` (single-node local), `infra/swarm/stack.prod.yml` (multi-node with replicas, resource limits, Docker secrets), and `infra/docker/entrypoint.sh` (Vault AppRole login → exec) all implemented. Makefile targets `swarm-deploy`, `swarm-status`, `swarm-rollback` present.
 
 **Problem:** CLAUDE.md and architecture discussions specify Docker Swarm as the production target, but `infra/` contains only Helm charts for Kubernetes. The Swarm stack files don't exist.
 
@@ -73,7 +73,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## REF-05 — MEDIO: Agent should be split into per-market instances
 
 **Sections:** `02-services.md`, `05-agent-pipeline.md`
-**Status:** Discussed, not yet formally approved
+**Status:** Resolved — single image, three Docker service instances via `AGENT_MARKET` env var. `services/agent/consumer.py` filters events by `_AGENT_MARKET` and uses group.id=`agent-{market}` for independent Kafka group offsets. `docker-compose.dev.yml` defines `agent-italy` (8083/8092), `agent-usa` (8097/8098), `agent-china` (8099/8100). CI (`agent.yml`) deploys three Helm releases via matrix strategy. Each market scales independently in Swarm/Kubernetes.
 
 **Problem:** A single agent service handles all three markets via in-process semaphores. This means a bug in the Italy pipeline can affect USA and China. Configuration, prompts, and rate limits are mixed in one process. Scaling one market independently is not possible.
 
@@ -137,7 +137,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## LEARNER-01 — ALTO: Learner gRPC methods are stubs
 
 **Sections:** `02-services.md`, `05-agent-pipeline.md`
-**Status:** Phase 3b pending
+**Status:** Resolved — `QueryKnowledgeGraph` (hybrid FTS + pgvector HNSW via `services/learner/internal/graph/query.go`), `GetJournalistProfile`, `ScoreFactualAccuracy` (OpenAI factual verification), and `IndexArticle` (ada-002 embeddings → pgvector + Redis HNSW) all implemented in `services/learner/internal/grpc/server.go`. `article.published` consumer in `services/learner/internal/consumer/` triggers `IndexArticle`.
 
 **Problem:** `LearnerService.QueryKnowledgeGraph`, `GetJournalistProfile`, and `ScoreFactualAccuracy` are declared in proto and called by agent and moderation, but the Learner service returns empty/stub responses. The agent's `fetch_context` node always gets an empty context list.
 
@@ -153,9 +153,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## OPS-01 — MEDIO: No per-service GitHub Actions CI pipelines
 
 **Sections:** `06-infrastructure.md`
-**Status:** Phase 5 pending
-
-**Problem:** `.github/workflows/` is empty. There are no CI pipelines for any service.
+**Status:** Resolved — per-service workflows in `.github/workflows/`: `agent.yml`, `auth.yml`, `learner.yml`, `analytics.yml`, `moderation.yml`, `sanity.yml`, `admin.yml`, `frontend.yml`, `infra.yml`. All Go services: lint→test (race+coverage≥75%)→build→migrate-and-deploy-staging→canary-prod. Python services: ruff+mypy→pytest (coverage≥80%)→build→migrate-and-deploy→canary. Vault credentials fetched via `hashicorp/vault-action`; only `VAULT_TOKEN` stored in GitHub Secrets. Argo Rollouts canary: 5%→50%→100%, auto-rollback on error rate >1% or p99 latency +50%. `correction.yml` tombstoned (service dissolved into learner, REF-01).
 
 **Approved solution (Phase 5):**
 - Per-service workflow files with path filtering: `on: push: paths: ['services/agent/**']`
@@ -169,7 +167,7 @@ However, `services/agent/pipeline/analytics_client.py` still contains the `get_t
 ## LEARN-01 — MEDIO: Quality scores never fed back into agent context
 
 **Sections:** `05-agent-pipeline.md`, `04-data-models.md`
-**Status:** Identified gap, no approved solution yet
+**Status:** Resolved — Option C implemented. (A) `SearchSimilar` in `services/learner/internal/db/queries.go` LEFT JOINs `analytics_svc.article_performance` and multiplies cosine similarity weight by `quality_score` (defaults to 0.5 for unscored articles); migration `008_learner_quality_feedback.up.sql` grants `learner_rw` SELECT on `analytics_svc.article_performance`. (B) New `GET /api/quality-summary?market=X` REST endpoint in `services/learner/internal/restapi/server.go` returns avg quality + top rejection reasons from `learner_svc.rejections`; `services/agent/pipeline/quality.py` fetches it via HTTP (3s timeout, neutral fallback); `fetch_quality_summary` node added to LangGraph pipeline before `check_rate_limit`; `_build_prompt` appends `QUALITY SIGNAL` section with avg score and top avoidances.
 
 **Problem:** `analytics_svc.article_performance.quality_score` is populated by `RecordQualityScore` gRPC calls after moderation, but nothing reads it back into the agent pipeline. The agent has no signal about which past articles scored well or poorly — it cannot learn to favour approaches that produce high-quality output.
 
@@ -198,7 +196,7 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 ## MEDIA-01 — ALTO: Articles have no images
 
 **Sections:** `05-agent-pipeline.md`, `06-infrastructure.md`
-**Status:** Identified gap, Option C approved for v1
+**Status:** Resolved (v1) — `studio/schemas/article.ts` has `coverImage` field (type: image, hotspot enabled, alt text required); validation warns (not blocks) on publish when missing. Connector creates Sanity draft with no `coverImage`; editor assigns in Studio before publishing. v2 (stock photo suggestion) deferred.
 
 **Problem:** The agent pipeline generates text only. Sanity draft documents are created with no `heroImage` or inline media. Articles publish as text-only, which is unacceptable for wine and food journalism where visual quality directly affects reader trust and engagement.
 
@@ -221,7 +219,7 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 ## ADMIN-01 — ALTO: Admin UI not implemented — separate Docker service required
 
 **Sections:** `02-services.md`, `07-auth.md`
-**Status:** Approved, pending implementation
+**Status:** Implemented — `admin/` SvelteKit app built; all 5 screens functional; all backend endpoints implemented. Remaining: backend HTTP servers for moderation (Python FastAPI `:8080`) and analytics REST (`:8081`) need to pass integration tests before marking resolved.
 
 **Decision:** Admin UI is a separate Docker service (`admin/`) in this repo, not a Sanity Studio plugin and not an external app. Sanity Studio is the CMS layer only (article editing, image assignment). The admin app handles all operational tooling that doesn't fit Studio.
 
@@ -263,8 +261,4 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 ## OPS-02 — BASSO: Audit log not exposed in frontend
 
 **Sections:** `07-auth.md`, `08-operations.md`
-**Status:** Depends on PHASE4-02
-
-**Problem:** Audit log exists in PostgreSQL and is accessible via `GET /api/admin/audit` but there is no UI for it.
-
-**Approved solution:** Audit Log page lives in the Admin app (`admin/`), not the public frontend. See ADMIN-01 — it is one of the v1 screens. Paginated, filterable by event_type and market. No export button (audit data stays in-app).
+**Status:** Resolved — Audit Log lives in the Admin app at `admin/src/routes/audit/`. Paginated, filterable by event_type and market. `GET /api/admin/audit` implemented in `services/auth/internal/server/http.go` (`auditLog()` method, admin role enforced). Not on public frontend by design.
