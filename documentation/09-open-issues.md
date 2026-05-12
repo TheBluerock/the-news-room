@@ -219,7 +219,7 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 ## ADMIN-01 — ALTO: Admin UI not implemented — separate Docker service required
 
 **Sections:** `02-services.md`, `07-auth.md`
-**Status:** Implemented — `admin/` SvelteKit app built; all 5 screens functional; all backend endpoints implemented. Remaining: backend HTTP servers for moderation (Python FastAPI `:8080`) and analytics REST (`:8081`) need to pass integration tests before marking resolved.
+**Status:** Resolved — `admin/` SvelteKit app built; all 5 screens functional. Backend: `services/moderation/api.py` (FastAPI :8080) covered by 12 unit tests in `tests/test_api.py` (psycopg2/kafka mocked via conftest.py); `services/analytics/internal/adminhttp/server.go` (:8081) covered by 11 Go tests in `server_test.go` (mock querier interface). All tests green.
 
 **Decision:** Admin UI is a separate Docker service (`admin/`) in this repo, not a Sanity Studio plugin and not an external app. Sanity Studio is the CMS layer only (article editing, image assignment). The admin app handles all operational tooling that doesn't fit Studio.
 
