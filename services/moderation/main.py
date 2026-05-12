@@ -4,6 +4,9 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
+import os
+
+import grpc
 import uvicorn
 from confluent_kafka import Producer
 from fastapi import FastAPI, Response
@@ -38,8 +41,11 @@ async def lifespan(app: FastAPI):
     dbmod.init(postgres_dsn)
     logger.info("db pool initialised")
 
+    analytics_addr = os.getenv("ANALYTICS_ADDR", "analytics:8080")
+
     openai_client = OpenAI(api_key=openai_key)
     producer = Producer({"bootstrap.servers": redpanda_brokers, "acks": "all"})
+    analytics_channel = grpc.insecure_channel(analytics_addr)
 
     # Expose producer to api routes for human-approve re-publish
     app.state.producer = producer
@@ -47,7 +53,7 @@ async def lifespan(app: FastAPI):
     _stop.clear()
     t = threading.Thread(
         target=consumer_mod.run,
-        args=(redpanda_brokers, openai_client, producer, _stop),
+        args=(redpanda_brokers, openai_client, producer, analytics_channel, _stop),
         daemon=True,
     )
     t.start()
@@ -59,6 +65,7 @@ async def lifespan(app: FastAPI):
     _stop.set()
     _ready.clear()
     producer.flush(timeout=10)
+    analytics_channel.close()
 
 
 # Main app on :8080 — admin API routes + health for Caddy

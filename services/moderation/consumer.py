@@ -10,6 +10,7 @@ from confluent_kafka import Consumer, KafkaError, Producer
 from openai import OpenAI
 from opentelemetry import propagate, trace
 
+import analytics_client
 import checks
 import db as dbmod
 
@@ -21,6 +22,7 @@ def run(
     brokers: str,
     openai_client: OpenAI,
     producer: Producer,
+    analytics_channel: grpc.Channel,
     stop_event: threading.Event,
 ) -> None:
     consumer = Consumer({
@@ -46,7 +48,7 @@ def run(
 
             try:
                 event = json.loads(msg.value())
-                _process(event, openai_client, producer, dlq_producer, brokers)
+                _process(event, openai_client, producer, analytics_channel, dlq_producer, brokers)
                 consumer.commit(message=msg)
             except (json.JSONDecodeError, KeyError) as e:
                 logger.error("bad message: %s", e)
@@ -58,7 +60,7 @@ def run(
         dlq_producer.flush()
 
 
-def _process(event: dict, openai_client: OpenAI, producer: Producer, dlq_producer: Producer, brokers: str) -> None:
+def _process(event: dict, openai_client: OpenAI, producer: Producer, analytics_channel: grpc.Channel, dlq_producer: Producer, brokers: str) -> None:
     article_id = event["article_id"]
     market = event["market"]
     content = event["content"]
@@ -94,6 +96,12 @@ def _process(event: dict, openai_client: OpenAI, producer: Producer, dlq_produce
             status = "auto_rejected"
             reason = cultural_reason if not cultural_ok else (", ".join(issues) or "quality too low")
             _publish_rejected(producer, article_id, market, reason, cultural_ok, factual_ok, quality, trace_id, headers)
+
+        # Record quality score in analytics_svc.article_performance (non-fatal)
+        try:
+            analytics_client.record_quality(analytics_channel, article_id, market, quality)
+        except Exception as e:
+            logger.warning("quality recording failed article_id=%s: %s", article_id, e)
 
         _save_to_queue(
             article_id=article_id,
