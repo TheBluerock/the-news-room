@@ -2,33 +2,27 @@ import type { it } from './it'
 
 export const en = {
   seo: {
-    homeTitle:       'ENOICA — Italian Wine Magazine · 001',
+    homeTitle:       'ENOICA — Italian Wine Magazine Online',
     homeDescription: 'ENOICA: the Italian wine magazine. Tastings, territories, wineries, travel and a guide to drinking well. Newsletter every Friday.',
   },
 
   header: {
-    liveEdition:  'LIVE EDITION',
     archive:      'Archive',
     home:         'Home',
-    tagline:      'Online magazine · new articles every Friday',
     mastheadSub:  'Online magazine on wine · wine travel · drinking culture',
-    publishedFrom:'Published from Milan, Verona and Palermo',
     nav:          ['Newsletter', 'Podcast', 'Events', 'Contact'] as [string, string, string, string],
   },
 
   footer: {
     col: {
-      magazine:  'Magazine',
+      magazine:  'ENOICA',
       sections:  'Sections',
       services:  'Services',
       events:    'Events',
-      publisher: 'Publisher',
+      publisher: 'Info',
     },
     links: {
-      editorial:     'Editorial',
-      issues:        'Issues',
-      subscriptions: 'Subscriptions',
-      newsstand:     'Newsstand',
+      subscriptions: 'Newsletter',
       slowWine:      'Slow Wine Fair',
       vinitaly:      'Vinitaly',
       cernilli:      'Cernilli Tasting',
@@ -38,8 +32,7 @@ export const en = {
       advertising:   'Advertising',
       privacy:       'Privacy',
     },
-    tagline: 'Online magazine · updated every Friday',
-    editor:  'Editor-in-chief: G. Roveda',
+    tagline: 'Online magazine on wine · wine travel · drinking culture',
   },
 
   editorial: {
@@ -50,7 +43,6 @@ export const en = {
     searchPh:       'Grape, region, winery…',
     channels:       'Channels',
     opening:        'Opening',
-    issueNo:        'ISSUE 001',
     newGuide:       'The new guide',
     wineMap:        'Wine map 2026',
     newGuideQuote:  '"An atlas of terroirs, grapes and people. Fourteen stops to take slowly, from Collio to Etna."',
@@ -70,7 +62,6 @@ export const en = {
 
   sommario: {
     contents: 'CONTENTS',
-    pages:    'Pages 004 — 132',
   },
 
   reviews: {
@@ -94,7 +85,7 @@ export const en = {
   },
 
   category: {
-    articlesPublished: 'articles published',
+    articlesPublished: 'articles',
     gridView:          'GRID VIEW · 3 COL',
     filters:           ['Latest', 'Most read', 'Verticals', 'Long reads', 'Video'] as [string, string, string, string, string],
   },

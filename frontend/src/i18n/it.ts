@@ -1,32 +1,26 @@
 export const it = {
   seo: {
-    homeTitle:       'ENOICA — Rivista del Vino · 001',
+    homeTitle:       'ENOICA — Magazine online del vino italiano',
     homeDescription: 'ENOICA: la rivista italiana del vino. Degustazioni, territori, cantine, itinerari e una guida al bere bene. Newsletter ogni venerdì.',
   },
 
   header: {
-    liveEdition:  'EDIZIONE LIVE',
-    archive:      'Arretrati',
+    archive:      'Archivio',
     home:         'Home',
-    tagline:      'Magazine online · nuovi articoli ogni venerdì',
     mastheadSub:  'Magazine online di vino · enoturismo · cultura del bere',
-    publishedFrom:'Pubblicato a Milano, Verona e Palermo',
     nav:          ['Newsletter', 'Podcast', 'Eventi', 'Contatti'] as [string, string, string, string],
   },
 
   footer: {
     col: {
-      magazine:  'Rivista',
+      magazine:  'ENOICA',
       sections:  'Sezioni',
       services:  'Servizi',
       events:    'Eventi',
-      publisher: 'Casa editrice',
+      publisher: 'Info',
     },
     links: {
-      editorial:     'Editoriale',
-      issues:        'Numeri',
-      subscriptions: 'Abbonamenti',
-      newsstand:     'Edicola',
+      subscriptions: 'Newsletter',
       slowWine:      'Slow Wine Fair',
       vinitaly:      'Vinitaly',
       cernilli:      'Cernilli Tasting',
@@ -36,8 +30,7 @@ export const it = {
       advertising:   'Pubblicità',
       privacy:       'Privacy',
     },
-    tagline: 'Magazine online · aggiornato ogni venerdì',
-    editor:  'Direttore responsabile: G. Roveda',
+    tagline: 'Magazine online di vino · enoturismo · cultura del bere',
   },
 
   editorial: {
@@ -48,7 +41,6 @@ export const it = {
     searchPh:       'Vitigno, regione, cantina…',
     channels:       'Canali',
     opening:        'In apertura',
-    issueNo:        'NUMERO 001',
     newGuide:       'La nuova guida',
     wineMap:        'Carta del vino 2026',
     newGuideQuote:  '«Un atlante di territori, vitigni e persone. Quattordici tappe da percorrere lentamente, dal Collio all\'Etna.»',
@@ -68,7 +60,6 @@ export const it = {
 
   sommario: {
     contents: 'SOMMARIO',
-    pages:    'Pagine 004 — 132',
   },
 
   reviews: {
@@ -92,7 +83,7 @@ export const it = {
   },
 
   category: {
-    articlesPublished: 'articoli pubblicati',
+    articlesPublished: 'articoli',
     gridView:          'VISTA GRIGLIA · 3 COL',
     filters:           ['Più recenti', 'Più letti', 'Verticali', 'Long read', 'Video'] as [string, string, string, string, string],
   },

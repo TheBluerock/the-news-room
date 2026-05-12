@@ -4,6 +4,7 @@ import SEO from '../../components/SEO.astro'
 import AdLeaderboard from '../../components/AdLeaderboard.astro'
 import Tags from '../../components/home/Tags.astro'
 import NewsletterForm from '../../components/svelte/NewsletterForm.svelte'
+import ArticleImage from '../../components/ArticleImage.astro'
 import {
   LANGS, SECTIONS_PRIMARY, SECTIONS_SECONDARY,
   isSectionId, t, type Lang,
@@ -97,7 +98,7 @@ function paragraphs(text: string) {
         <h1>{t(sectionMeta, lang).toUpperCase()}</h1>
         <div class="sub">
           <p>{sectionSubStr}</p>
-          <span class="count">№001 — {sectionArticles.length} {T.category.articlesPublished}</span>
+          <span class="count">{sectionArticles.length} {T.category.articlesPublished}</span>
         </div>
       </div>
 
@@ -113,8 +114,8 @@ function paragraphs(text: string) {
       <!-- Article grid -->
       <div class="cat-grid">
         {sectionArticles.map(a => (
-          <a class="cat-card" href={`/${lang}/${a.articleId}/`}>
-            <div class="ci"></div>
+          <a class="cat-card" href={`/${lang}/${a.slug}/`}>
+            <ArticleImage image={a.image} alt={a.title} class="ci" widths={[300, 600]} sizes="(max-width:640px) 100vw, (max-width:900px) 50vw, 33vw" />
             <div class="cb">
               <div class="ce">
                 <span>{a.section.toUpperCase()}</span>
@@ -177,14 +178,21 @@ function paragraphs(text: string) {
         </div>
       </div>
 
-      <!-- Cover image placeholder -->
-      <div class="art-cover"></div>
+      <ArticleImage
+        image={article.image}
+        alt={article.title}
+        class="art-cover"
+        widths={[800, 1200, 1600]}
+        sizes="100vw"
+        loading="eager"
+        fetchpriority="high"
+      />
       <div class="art-cover-cap">
         <span>{article.section.toUpperCase()} · {formatDate(article.approvedAt)}</span>
         <span>↦ 1/1</span>
       </div>
 
-      <AdLeaderboard lang={lang} brand={`ENOICA · ${article.section.toUpperCase()} · №001`} />
+      <AdLeaderboard lang={lang} brand={`ENOICA · ${article.section.toUpperCase()}`} />
 
       <!-- Article body -->
       <div class="art-body">
@@ -237,8 +245,8 @@ function paragraphs(text: string) {
           </h2>
           <div class="cat-grid">
             {related.map(a => (
-              <a class="cat-card" href={`/${lang}/${a.articleId}/`}>
-                <div class="ci"></div>
+              <a class="cat-card" href={`/${lang}/${a.slug}/`}>
+                <ArticleImage image={a.image} alt={a.title} class="ci" widths={[300, 600]} sizes="(max-width:640px) 100vw, 33vw" />
                 <div class="cb">
                   <div class="ce">
                     <span>{a.section.toUpperCase()}</span>

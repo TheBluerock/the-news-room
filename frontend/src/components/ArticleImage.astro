@@ -1,0 +1,48 @@
+---
+import { Picture } from 'astro:assets'
+
+interface ImageData {
+  url: string
+  width: number
+  height: number
+}
+
+interface Props {
+  image?: ImageData
+  alt: string
+  widths?: number[]
+  sizes?: string
+  class?: string
+  loading?: 'lazy' | 'eager'
+  fetchpriority?: 'high' | 'low' | 'auto'
+}
+
+const {
+  image,
+  alt,
+  widths = [400, 800, 1200],
+  sizes = '100vw',
+  class: className = '',
+  loading = 'lazy',
+  fetchpriority,
+} = Astro.props
+---
+
+{image ? (
+  <div class={className}>
+    <Picture
+      src={image.url}
+      width={image.width}
+      height={image.height}
+      alt={alt}
+      formats={['avif', 'webp']}
+      widths={widths}
+      sizes={sizes}
+      loading={loading}
+      fetchpriority={fetchpriority}
+      decoding="async"
+    />
+  </div>
+) : (
+  <div class={className} aria-hidden="true"></div>
+)}

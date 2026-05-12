@@ -2,33 +2,27 @@ import type { it } from './it'
 
 export const zh = {
   seo: {
-    homeTitle:       'ENOICA — 意大利葡萄酒杂志 · 001',
+    homeTitle:       'ENOICA — 意大利葡萄酒在线杂志',
     homeDescription: 'ENOICA：意大利葡萄酒杂志。品鉴、产区、酒庄、旅行与饮酒指南。每周五简报。',
   },
 
   header: {
-    liveEdition:  '实时版',
-    archive:      '往期',
+    archive:      '存档',
     home:         '首页',
-    tagline:      '线上杂志 · 每周五更新',
     mastheadSub:  '线上杂志 · 葡萄酒 · 酒乡之旅 · 饮文化',
-    publishedFrom:'由米兰、维罗纳与巴勒莫编辑出品',
     nav:          ['邮件订阅', '播客', '活动', '联系'] as [string, string, string, string],
   },
 
   footer: {
     col: {
-      magazine:  '刊物',
+      magazine:  'ENOICA',
       sections:  '栏目',
       services:  '服务',
       events:    '活动',
-      publisher: '出版方',
+      publisher: '关于',
     },
     links: {
-      editorial:     '编辑部',
-      issues:        '往期',
-      subscriptions: '订阅',
-      newsstand:     '订购',
+      subscriptions: '邮件订阅',
       slowWine:      '慢酒展',
       vinitaly:      '维罗纳酒展',
       cernilli:      '切尔尼利品鉴',
@@ -38,8 +32,7 @@ export const zh = {
       advertising:   '广告',
       privacy:       '隐私',
     },
-    tagline: '线上杂志 · 每周五更新',
-    editor:  '主编：G. Roveda',
+    tagline: '线上杂志 · 葡萄酒 · 酒乡之旅 · 饮文化',
   },
 
   editorial: {
@@ -50,7 +43,6 @@ export const zh = {
     searchPh:       '品种、产区、酒庄…',
     channels:       '频道',
     opening:        '卷首',
-    issueNo:        '第 001 期',
     newGuide:       '新版指南',
     wineMap:        '2026 酒图',
     newGuideQuote:  '「一份关于风土、品种与人的图集。十四站，从科利奥到埃特纳，慢行细品。」',
@@ -70,7 +62,6 @@ export const zh = {
 
   sommario: {
     contents: '目录',
-    pages:    '第 004 — 132 页',
   },
 
   reviews: {
@@ -94,7 +85,7 @@ export const zh = {
   },
 
   category: {
-    articlesPublished: '已发布',
+    articlesPublished: '篇',
     gridView:          '网格视图 · 三列',
     filters:           ['最新', '最热', '垂直评测', '长读', '影像'] as [string, string, string, string, string],
   },

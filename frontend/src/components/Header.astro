@@ -15,11 +15,6 @@ const T = useT(lang)
 <header class="page">
   <!-- Top utility bar -->
   <div class="topbar">
-    <div>
-      <span class="mono">EDIZIONE №001 · 17.05.2026</span>
-      <span class="dot"></span>
-      <span>{T.header.tagline}</span>
-    </div>
     <div style="display:flex;align-items:center;gap:18px">
       {T.header.nav.map(l => <a href="#">{l}</a>)}
       <div class="lang">
@@ -35,9 +30,7 @@ const T = useT(lang)
     <div class="masthead">
       <a href={`/${lang}/`}><h1 class="wordmark">ENOICA</h1></a>
       <div class="masthead-meta">
-        <span class="issue">{T.header.liveEdition}</span>
-        {T.header.mastheadSub}<br />
-        {T.header.publishedFrom}
+        {T.header.mastheadSub}
       </div>
     </div>
   </div>
@@ -62,6 +55,6 @@ const T = useT(lang)
       <a href={`/${lang}/${s.id}/`} class={activeSection === s.id ? 'active' : ''}>{t(s, lang)}</a>
     ))}
     <span class="spacer"></span>
-    <span class="right">{T.header.archive} / 2026 · 2025 · 2024</span>
+    <span class="right">{T.header.archive}</span>
   </div>
 </header>

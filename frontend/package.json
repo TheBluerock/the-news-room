@@ -13,14 +13,6 @@
   "dependencies": {
     "@astrojs/svelte": "^8.1.0",
     "@astrojs/vercel": "^10.0.6",
-    "@fontsource-variable/archivo": "^5.2.8",
-    "@fontsource-variable/eb-garamond": "^5.2.7",
-    "@fontsource/archivo": "^5.2.8",
-    "@fontsource/archivo-black": "^5.2.8",
-    "@fontsource/archivo-narrow": "^5.2.8",
-    "@fontsource/eb-garamond": "^5.2.7",
-    "@fontsource/jetbrains-mono": "^5.2.8",
-    "@fontsource/noto-serif-sc": "^5.2.9",
     "@sanity/client": "^6.20.1",
     "astro": "^6.3.1",
     "svelte": "^5.55.5"

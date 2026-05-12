@@ -10,10 +10,8 @@ const cols = [
   {
     h: T.footer.col.magazine,
     items: [
-      { label: T.footer.links.editorial,     href: '#' },
-      { label: T.footer.links.issues,        href: '#' },
       { label: T.footer.links.subscriptions, href: '#' },
-      { label: T.footer.links.newsstand,     href: '#' },
+      { label: T.footer.links.advertising,   href: '#' },
     ],
   },
   {
@@ -36,10 +34,9 @@ const cols = [
   {
     h: T.footer.col.publisher,
     items: [
-      { label: T.footer.links.about,       href: '#' },
-      { label: T.footer.links.careers,     href: '#' },
-      { label: T.footer.links.advertising, href: '#' },
-      { label: T.footer.links.privacy,     href: '#' },
+      { label: T.footer.links.about,    href: '#' },
+      { label: T.footer.links.careers,  href: '#' },
+      { label: T.footer.links.privacy,  href: '#' },
     ],
   },
 ]
@@ -49,7 +46,6 @@ const cols = [
   <div class="footer-top">
     <div class="display" style="font-size:28px;letter-spacing:-.03em;line-height:1">ENOICA</div>
     <div style="display:flex;gap:18px;align-items:center">
-      <span class="pill red">№001 · 2026</span>
       <span class="narrow" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">{T.footer.tagline}</span>
     </div>
   </div>
@@ -64,8 +60,7 @@ const cols = [
     ))}
   </div>
   <div class="footer-bot">
-    <span>© 2026 ENOICA · Milano</span>
-    <span>{T.footer.editor}</span>
-    <span>redazione@enoica.it · @enoica_mag</span>
+    <span>© 2026 ENOICA</span>
+    <span>info@enoica.it · @enoica_mag</span>
   </div>
 </footer>

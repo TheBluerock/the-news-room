@@ -10,4 +10,7 @@ export default defineConfig({
   build: {
     format: 'directory',
   },
+  image: {
+    domains: ['cdn.sanity.io'],
+  },
 })

@@ -2,6 +2,7 @@
 import { type Lang } from '../../lib/i18n'
 import { useT } from '../../i18n'
 import type { Article } from '../../lib/queries'
+import ArticleImage from '../ArticleImage.astro'
 
 interface Props { lang: Lang; article: Article }
 const { lang, article } = Astro.props
@@ -15,9 +16,15 @@ const date = new Date(article.approvedAt).toLocaleDateString(
 ---
 
 <section class="hero">
-  <div class="hero-img">
-    <!-- Image from Sanity CDN when available -->
-  </div>
+  <ArticleImage
+    image={article.image}
+    alt={article.title}
+    class="hero-img"
+    widths={[800, 1200, 1600]}
+    sizes="100vw"
+    loading="eager"
+    fetchpriority="high"
+  />
 
   <div class="hero-caption">
     <span>{eyebrow} · {date}</span>

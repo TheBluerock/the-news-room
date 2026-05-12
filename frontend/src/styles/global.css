@@ -183,7 +183,7 @@ input { font: inherit }
   letter-spacing: .08em;
   font-size: 11px;
   line-height: 1.5;
-  max-width: 280px;
+  white-space: nowrap;
   padding-bottom: 14px;
 }
 .masthead-meta .issue { font-family: var(--display); font-size: 42px; letter-spacing: -.02em; color: var(--accent); display: block; line-height: 1; margin-bottom: 6px }
@@ -213,7 +213,7 @@ input { font: inherit }
 /* hero */
 .hero { position: relative; margin-top: 16px }
 .hero-img { aspect-ratio: 16/7; width: 100%; background: #1b1b1b; border: 1px solid var(--rule); overflow: hidden }
-.hero-img img { width: 100%; height: 100%; object-fit: cover }
+.hero-img picture, .hero-img img { display: block; width: 100%; height: 100%; object-fit: cover }
 .hero-caption {
   display: flex;
   align-items: center;
@@ -375,7 +375,7 @@ footer { padding: 30px 0 50px }
 .cat-card { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); cursor: pointer; display: flex; flex-direction: column; background: var(--paper) }
 .cat-card:nth-child(3n) { border-right: 0 }
 .cat-card .ci { aspect-ratio: 4/3; background: #1b1b1b; border-bottom: 1px solid var(--rule); overflow: hidden }
-.cat-card .ci img { width: 100%; height: 100%; object-fit: cover }
+.cat-card .ci picture, .cat-card .ci img { display: block; width: 100%; height: 100%; object-fit: cover }
 .cat-card .cb { padding: 18px; display: flex; flex-direction: column; gap: 10px; flex: 1 }
 .cat-card .ce { font-family: var(--narrow); font-weight: 700; text-transform: uppercase; letter-spacing: .1em; font-size: 10px; color: var(--muted); display: flex; justify-content: space-between }
 .cat-card h3 { font-family: var(--sans); font-weight: 800; font-size: 22px; line-height: 1.1; letter-spacing: -.01em; margin: 0 }
@@ -390,7 +390,7 @@ footer { padding: 30px 0 50px }
 .art-head h1 { font-family: var(--display); font-size: 96px; letter-spacing: -.035em; line-height: .86; text-transform: uppercase; margin: 0 }
 .art-head .stand { font-family: var(--serif); font-size: 22px; line-height: 1.35; font-style: italic; color: var(--ink-soft); margin-top: 18px; max-width: 920px }
 .art-cover { aspect-ratio: 16/8; background: #1b1b1b; border: 1px solid var(--rule); margin: 22px 0 8px; overflow: hidden }
-.art-cover img { width: 100%; height: 100%; object-fit: cover }
+.art-cover picture, .art-cover img { display: block; width: 100%; height: 100%; object-fit: cover }
 .art-cover-cap { font-family: var(--narrow); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-size: 11px; color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between }
 .art-body { display: grid; grid-template-columns: 140px 1fr 280px; gap: 32px; padding: 28px 0; border-bottom: 1px solid var(--rule) }
 .art-body .side { font-family: var(--narrow); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; font-size: 10px; color: var(--muted); display: flex; flex-direction: column; gap: 18px }
@@ -448,7 +448,7 @@ body.theme-cream {
   .footer-cols { grid-template-columns: repeat(2, 1fr) }
   .hero-body { grid-template-columns: 1fr }
   .hero-meta { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: 16px; flex-direction: row; flex-wrap: wrap; gap: 10px 24px }
-  .cat-header h1 { font-size: 100px }
+  .cat-header h1 { font-size: clamp(48px, 9vw, 100px) }
   .art-head h1 { font-size: 64px }
   .art-head .stand { font-size: 18px }
   .newsletter h2 { font-size: 64px }
@@ -464,7 +464,7 @@ body.theme-cream {
 
   /* masthead */
   .masthead { flex-direction: column; align-items: flex-start; gap: 8px }
-  .masthead-meta { text-align: left; max-width: 100%; padding-bottom: 4px }
+  .masthead-meta { text-align: left; white-space: normal; max-width: 100%; padding-bottom: 4px }
   .masthead-meta .issue { font-size: 28px }
   .wordmark { font-size: 68px }
 
@@ -504,7 +504,7 @@ body.theme-cream {
   .rev:nth-child(odd) { border-right: 1px solid var(--rule) }
 
   /* category page */
-  .cat-header h1 { font-size: 56px; letter-spacing: -.03em }
+  .cat-header h1 { font-size: clamp(22px, 7vw, 48px); letter-spacing: -.02em }
   .cat-header .sub { flex-direction: column; gap: 8px }
   .cat-grid { grid-template-columns: 1fr }
   .cat-card:nth-child(3n) { border-right: 1px solid var(--rule) }

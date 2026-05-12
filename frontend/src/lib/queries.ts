@@ -5,18 +5,23 @@ import type { Lang } from './i18n'
 export interface Article {
   _id: string
   articleId: string
-  slug: string          // URL-friendly slug derived from title
+  slug: string
   market: string
   language: Lang
   content: string
   title: string
   excerpt: string
+  byline: string
   section: string
-  author: string
   tags: string[]
   readingTime: number
   qualityScore: number
   approvedAt: string
+  image?: {
+    url: string
+    width: number
+    height: number
+  }
 }
 
 export interface Review {
@@ -37,10 +42,11 @@ export interface SommarioItem {
 // market, language, content, qualityScore, approvedAt). Fields like title,
 // excerpt, section, byline, tags must be added to the schema + agent pipeline.
 const FIELDS = `
-  _id, articleId, slug, market, language,
-  content, title, excerpt, section, author, tags,
+  _id, articleId, "slug": slug.current, market, language,
+  content, title, excerpt, byline, section, tags,
   "readingTime": round(length(coalesce(content, "")) / 1000),
-  qualityScore, approvedAt
+  qualityScore, approvedAt,
+  "image": coverImage.asset->{url, "width": metadata.dimensions.width, "height": metadata.dimensions.height}
 `
 
 export async function getHeroArticle(lang: Lang): Promise<Article> {
@@ -74,13 +80,13 @@ export async function getAllArticleSlugs(): Promise<{ lang: Lang; slug: string }
   if (!isSanityConfigured) {
     return MOCK_ARTICLES.map(a => ({ lang: a.language, slug: a.slug }))
   }
-  return sanity.fetch(`*[_type=="article"] { "lang": language, slug }`)
+  return sanity.fetch(`*[_type=="article"] { "lang": language, "slug": slug.current }`)
 }
 
 export async function getArticleBySlug(slug: string, lang: Lang): Promise<Article | null> {
   if (!isSanityConfigured) return MOCK_ARTICLES.find(a => a.slug === slug) ?? MOCK_ARTICLES[0]
   return sanity.fetch(
-    `*[_type=="article" && slug==$slug && language==$lang] [0] { ${FIELDS} }`,
+    `*[_type=="article" && slug.current==$slug && language==$lang] [0] { ${FIELDS} }`,
     { slug, lang }
   )
 }
