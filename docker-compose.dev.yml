@@ -156,7 +156,7 @@ services:
     build:
       context: ./services/learner
       dockerfile: Dockerfile.ingest
-    ports: ["8096:8090"]
+    ports: ["8101:8090"]
     environment:
       VAULT_ADDR: http://vault:8200
       VAULT_TOKEN: dev-root-token

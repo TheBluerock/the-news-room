@@ -85,11 +85,12 @@ func SearchSimilar(ctx context.Context, pool *pgxpool.Pool, market string, query
 	vec := pgvector.NewVector(queryVec)
 
 	// JOIN article_performance to weight results by editorial quality score.
-	// Articles with no recorded quality default to 0.5 (neutral).
+	// New articles without a quality score default to 0.7 (optimistic) so fresh content
+	// competes with proven articles rather than being permanently deprioritised.
 	rows, err := pool.Query(ctx, `
 		SELECT ae.article_id::text, 'article' AS type,
 		       '' AS content,
-		       ((1 - (ae.embedding <=> $1)) * COALESCE(ap.quality_score, 0.5))::float4 AS weight
+		       ((1 - (ae.embedding <=> $1)) * COALESCE(ap.quality_score, 0.7))::float4 AS weight
 		FROM learner_svc.article_embeddings ae
 		LEFT JOIN analytics_svc.article_performance ap
 		       ON ap.article_id = ae.article_id

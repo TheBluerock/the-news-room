@@ -262,3 +262,4 @@ Option C — Both: weighted retrieval (A) for passive reinforcement + quality su
 
 **Sections:** `07-auth.md`, `08-operations.md`
 **Status:** Resolved — Audit Log lives in the Admin app at `admin/src/routes/audit/`. Paginated, filterable by event_type and market. `GET /api/admin/audit` implemented in `services/auth/internal/server/http.go` (`auditLog()` method, admin role enforced). Not on public frontend by design.
+

@@ -1,75 +1,98 @@
 :80 {
-    # JWT RS256 validation — public key loaded from Vault Agent sidecar
-    # All routes except /api/auth/login and /api/auth/refresh require a valid JWT
+    # Public routes — no auth required
     @public {
         path /api/auth/login
         path /api/auth/refresh
         path /health
     }
 
-    @protected {
-        not path @public
-        path /api/*
-    }
-
-    # JWT middleware for protected API routes
-    # Replace <JWT_PUBLIC_KEY_PATH> with actual Vault sidecar mount in K8s
-    handle @protected {
-        # TODO: wire jwt validation — in K8s this reads from /vault/secrets/jwt_public_key
-        forward_auth http://auth:8080 {
-            uri /internal/verify
-            copy_headers X-User-ID X-User-Market X-User-Role
-        }
-    }
-
-    # Auth service
+    # Auth service (login, refresh, verify, GDPR)
     handle /api/auth/* {
         reverse_proxy http://auth:8080
     }
 
-    # Agent / article generation
-    handle /api/agent/* {
-        reverse_proxy http://agent:8080
-    }
-
-    # Analytics — REST admin API (port 8081); gRPC on 8080 is internal-only
-    handle /api/analytics/* {
-        reverse_proxy http://analytics:8081
-    }
-
-    # Admin — audit log (admin role enforced by auth service)
-    handle /api/admin/* {
-        reverse_proxy http://auth:8080
-    }
-
-    # Moderation HTTP API (not yet implemented — ADMIN-01)
-    handle /api/moderation/* {
-        reverse_proxy http://moderation:8080
-    }
-
-    # Editorial calendar CRUD (analytics service REST API on 8081)
-    handle /api/calendar/* {
-        reverse_proxy http://analytics:8081
-    }
-
-    # Editor corrections — learner REST HTTP on 8088
-    handle /api/corrections {
-        reverse_proxy http://learner:8088
-    }
-
-    # GDPR deletion
     handle /api/user/data {
         reverse_proxy http://auth:8080
     }
 
-    # Public frontend (Astro static site — dev server on 4321)
-    handle {
-        reverse_proxy http://frontend:4321
+    # Admin endpoints — JWT validated + admin role enforced via auth service
+    handle /api/admin/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://auth:8080
     }
 
-    # Health passthrough (for load balancer probes)
+    # Moderation queue and approve/reject — admin role required
+    handle /api/moderation/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://moderation:8080
+    }
+
+    # Per-market agent trigger — JWT required, routed by market path segment
+    handle /api/agent/italy/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://agent-italy:8080
+    }
+
+    handle /api/agent/usa/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://agent-usa:8080
+    }
+
+    handle /api/agent/china/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://agent-china:8080
+    }
+
+    # Analytics REST admin API (port 8081); gRPC on 8080 is internal-only
+    handle /api/analytics/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://analytics:8081
+    }
+
+    # Editorial calendar CRUD
+    handle /api/calendar/* {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://analytics:8081
+    }
+
+    # Editor corrections — learner REST HTTP
+    handle /api/corrections {
+        forward_auth http://auth:8080 {
+            uri /internal/verify
+            copy_headers X-User-ID X-User-Market X-User-Role
+        }
+        reverse_proxy http://learner:8088
+    }
+
+    # Health passthrough for load balancer probes
     handle /health {
         respond "ok" 200
+    }
+
+    # Public frontend (Astro static — dev server on 4321)
+    handle {
+        reverse_proxy http://frontend:4321
     }
 
     log {

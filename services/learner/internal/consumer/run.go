@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/otel"
@@ -17,6 +19,11 @@ import (
 	"github.com/newsroom/learner/internal/embeddings"
 	"github.com/newsroom/learner/internal/fastpath"
 )
+
+var correctionPGFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "learner_correction_pg_write_failures_total",
+	Help: "Slow-path PostgreSQL writes that failed — correction persisted only in Redis (48h TTL).",
+}, []string{"market", "type"})
 
 const (
 	topicEditorCorrection = "editor.correction"
@@ -226,8 +233,8 @@ func handleCorrection(ctx context.Context, data []byte, rdb *redis.Client, pool 
 
 	// Slow path: PostgreSQL log
 	if err := db.LogCorrection(ctx, pool, evt.CorrectionID, evt.Market, evt.CorrectionType, evt.Reason, evt.OldValue, evt.NewValue); err != nil {
-		logger.Warn("slow-path correction log failed", "correction_id", evt.CorrectionID, "err", err)
-		// Don't fail — fast path succeeded; slow path failure is non-fatal for the event
+		logger.Warn("slow-path correction log failed — correction survives in Redis only (48h TTL)", "correction_id", evt.CorrectionID, "err", err)
+		correctionPGFailures.WithLabelValues(evt.Market, "correction").Inc()
 	} else {
 		// DEL Redis key only after successful PostgreSQL write
 		_ = fastpath.DeleteCorrection(ctx, rdb, evt.Market, evt.CorrectionID)
@@ -259,7 +266,8 @@ func handleRejection(ctx context.Context, data []byte, rdb *redis.Client, pool *
 
 	// Slow path: PostgreSQL
 	if err := db.LogRejection(ctx, pool, evt.ArticleID, evt.Market, evt.Reason); err != nil {
-		logger.Warn("slow-path rejection log failed", "article_id", evt.ArticleID, "err", err)
+		logger.Warn("slow-path rejection log failed — rejection survives in Redis only (48h TTL)", "article_id", evt.ArticleID, "err", err)
+		correctionPGFailures.WithLabelValues(evt.Market, "rejection").Inc()
 	}
 
 	return nil
