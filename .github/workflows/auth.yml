@@ -53,37 +53,28 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
 
-  migrate-and-deploy:
+  deploy:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    environment: staging
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch DB credentials from Vault
-        uses: hashicorp/vault-action@v3
+      - name: Run migrations
+        uses: appleboy/ssh-action@v1
         with:
-          url: ${{ secrets.VAULT_ADDR }}
-          token: ${{ secrets.VAULT_TOKEN }}
-          secrets: secret/data/newsroom/auth postgres_dsn | DB_URL
-      - name: Run migrations (blocks deploy on failure)
-        run: make migrate-up ENV=staging
-      - name: Deploy to staging
-        run: |
-          helm upgrade --install newsroom-auth infra/helm/newsroom \
-            --set service=auth \
-            --set image.tag=${{ needs.build.outputs.image_tag }} \
-            --namespace staging --wait
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
-    needs: migrate-and-deploy
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - name: Canary deploy (Argo Rollouts — 5%→50%→100%, auto-rollback)
-        run: |
-          kubectl argo rollouts set image newsroom-auth \
-            auth=${{ needs.build.outputs.image_tag }} \
-            --namespace production
+          host: ${{ secrets.SWARM_HOST }}
+          username: ${{ secrets.SWARM_USER }}
+          key: ${{ secrets.SWARM_SSH_KEY }}
+          script: |
+            PROD_DB_URL="${{ secrets.PROD_DB_URL }}" make migrate-up ENV=prod
+      - name: Deploy to Swarm
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SWARM_HOST }}
+          username: ${{ secrets.SWARM_USER }}
+          key: ${{ secrets.SWARM_SSH_KEY }}
+          script: |
+            docker service update \
+              --image ${{ needs.build.outputs.image_tag }} \
+              --update-order start-first \
+              newsroom_auth

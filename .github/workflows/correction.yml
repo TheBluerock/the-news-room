@@ -4,4 +4,10 @@
 #
 # Retained as a tombstone to prevent accidental recreation of the correction service.
 name: Correction Service (DISSOLVED — REF-01)
-on: {}
+on:
+  workflow_dispatch:
+jobs:
+  dissolved:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This service was dissolved into learner/ (REF-01). See learner.yml."

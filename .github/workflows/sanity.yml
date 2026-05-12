@@ -55,8 +55,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: production
     steps:
       - name: Deploy to Swarm
         uses: appleboy/ssh-action@v1
