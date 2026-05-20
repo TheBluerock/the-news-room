@@ -110,7 +110,7 @@ func (s *HTTPServer) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := store.GetUserByEmail(r.Context(), s.db, claims.Subject)
+	user, err := store.GetUserByID(r.Context(), s.db, claims.Subject)
 	if err != nil {
 		writeErr(w, http.StatusUnauthorized, "user not found")
 		return

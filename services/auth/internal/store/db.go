@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -33,6 +34,21 @@ func GetUserByEmail(ctx context.Context, db *pgxpool.Pool, email string) (*User,
 	).Scan(&u.ID, &u.Email, &u.Market, &u.PasswordHash)
 	if err != nil {
 		return nil, fmt.Errorf("pg: get user: %w", err)
+	}
+	return u, nil
+}
+
+func GetUserByID(ctx context.Context, db *pgxpool.Pool, id string) (*User, error) {
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, fmt.Errorf("pg: get user by id: invalid uuid: %w", err)
+	}
+	u := &User{}
+	err := db.QueryRow(ctx,
+		`SELECT id::text, email, COALESCE(market, ''), password_hash
+		 FROM users WHERE id = $1::uuid`, id,
+	).Scan(&u.ID, &u.Email, &u.Market, &u.PasswordHash)
+	if err != nil {
+		return nil, fmt.Errorf("pg: get user by id: %w", err)
 	}
 	return u, nil
 }

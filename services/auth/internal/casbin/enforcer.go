@@ -2,6 +2,7 @@ package casbinx
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/casbin/casbin/v2"
@@ -42,7 +43,13 @@ func NewEnforcer(rules [][]string) (*casbin.Enforcer, error) {
 		lines = append(lines, strings.Join(rule, ", "))
 	}
 
-	adapter := stringadapter.NewAdapter(strings.Join(lines, "\n"))
+	policy := strings.Join(lines, "\n")
+	if policy == "" {
+		slog.Warn("casbin: no policies loaded, using fail-closed dummy policy",
+			"input_rows", len(rules))
+		policy = "p, _no_user_, _no_obj_, _no_act_"
+	}
+	adapter := stringadapter.NewAdapter(policy)
 	e, err := casbin.NewEnforcer(m, adapter)
 	if err != nil {
 		return nil, fmt.Errorf("casbin: enforcer: %w", err)
