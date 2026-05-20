@@ -15,7 +15,7 @@ import grpc
 import redis as redis_lib
 from confluent_kafka import Consumer, KafkaError, Producer
 
-import pipeline as pipeline_mod
+import graph as pipeline_mod
 
 logger = logging.getLogger("agent.consumer")
 

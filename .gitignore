@@ -2,6 +2,7 @@
 */vendor/
 **/go.sum
 **/coverage.out
+**/.coverage
 
 # Python
 __pycache__/

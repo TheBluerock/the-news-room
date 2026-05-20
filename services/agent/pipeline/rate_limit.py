@@ -20,8 +20,8 @@ def acquire(rdb: redis_lib.Redis, market: str) -> bool:
     bucket_key = f"llm:rate:{market}"
     refill_key = f"llm:rate:{market}:last_refill"
 
-    pipe = rdb.pipeline(transaction=True)
     try:
+        pipe = rdb.pipeline(transaction=True)
         pipe.watch(bucket_key, refill_key)
         pipe.multi()
 
