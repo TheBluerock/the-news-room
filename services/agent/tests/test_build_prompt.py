@@ -97,7 +97,7 @@ def test_build_prompt_includes_context_top_3():
     assert "context snippet number 3" not in prompt
     # Snippet length capped to 150 chars
     line_with_zero = [ln for ln in prompt.splitlines() if "context snippet number 0" in ln][0]
-    assert len(line_with_zero) <= 160  # "- " prefix + 150 chars
+    assert len(line_with_zero) <= 155  # "- " prefix (2) + 150 chars slice + small margin
 
 
 def test_build_prompt_includes_quality_signal_with_rejections():

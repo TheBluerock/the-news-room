@@ -43,7 +43,7 @@ Headlines:
 		market, limit, strings.Join(titles, "\n"),
 	)
 
-	body, _ := json.Marshal(map[string]interface{}{
+	body, err := json.Marshal(map[string]interface{}{
 		"model": "gpt-4o",
 		"messages": []map[string]string{
 			{"role": "user", "content": wrappedPrompt},
@@ -51,6 +51,9 @@ Headlines:
 		"temperature":     0,
 		"response_format": map[string]string{"type": "json_object"},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("ExtractFromTitles: marshal OpenAI request (market=%s, titles=%d): %w", market, len(titles), err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		openAIChatURL, bytes.NewReader(body))

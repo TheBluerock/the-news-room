@@ -85,8 +85,13 @@ def test_corrections_skips_malformed_json(redis_client):
 
 
 def test_corrections_respects_ttl(redis_client):
-    # Mimic the 48h TTL admin UI sets — we use 1s here.
-    redis_client.set("corrections:italy:c1", json.dumps({"reason": "x"}), ex=1)
+    # Mimic the 48h TTL admin UI sets — we use 2s here.
+    redis_client.set("corrections:italy:c1", json.dumps({"reason": "x"}), ex=2)
     assert "c1" in corrections.fetch(redis_client, "italy")
-    time.sleep(1.5)
+    # Poll for expiry with a generous overall timeout to avoid flakiness on slow CI.
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if corrections.fetch(redis_client, "italy") == {}:
+            return
+        time.sleep(0.2)
     assert corrections.fetch(redis_client, "italy") == {}

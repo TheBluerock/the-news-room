@@ -167,8 +167,16 @@ func TestQualitySummary_OkWithDefaults(t *testing.T) {
 	}
 	var s map[string]any
 	_ = json.NewDecoder(rec.Body).Decode(&s)
-	if s["AvgQualityScore"].(float64) != 0.5 {
-		t.Errorf("default avg = %v", s["AvgQualityScore"])
+	raw, ok := s["AvgQualityScore"]
+	if !ok {
+		t.Fatalf("AvgQualityScore missing from response: %v", s)
+	}
+	avg, ok := raw.(float64)
+	if !ok {
+		t.Fatalf("AvgQualityScore type = %T, want float64", raw)
+	}
+	if avg != 0.5 {
+		t.Errorf("default avg = %v", avg)
 	}
 }
 
@@ -196,8 +204,16 @@ func TestSuggestions_HappyPath(t *testing.T) {
 	if len(out) != 1 {
 		t.Fatalf("got %d, want 1", len(out))
 	}
-	if out[0]["TopicID"] != "barolo" {
-		t.Errorf("topic_id = %v", out[0]["TopicID"])
+	rawID, ok := out[0]["TopicID"]
+	if !ok {
+		t.Fatalf("TopicID missing from response: %v", out[0])
+	}
+	topicID, ok := rawID.(string)
+	if !ok {
+		t.Fatalf("TopicID type = %T, want string", rawID)
+	}
+	if topicID != "barolo" {
+		t.Errorf("topic_id = %q", topicID)
 	}
 }
 

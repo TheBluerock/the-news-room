@@ -58,8 +58,8 @@ def test_refill_bounded_to_capacity(redis_client):
 
 
 def test_concurrent_acquires_consistent(redis_client):
-    # 30 concurrent attempts with capacity 10 should grant exactly 10
-    # (modulo refills if test is slow — none should occur within ~1s).
+    # 30 concurrent attempts with capacity 10 should grant ~10. Test runs well under
+    # REFILL_INTERVAL (60s), so refills can't legitimately add tokens.
     successes = []
     lock = threading.Lock()
 
@@ -75,8 +75,11 @@ def test_concurrent_acquires_consistent(redis_client):
         t.join()
 
     granted = sum(1 for s in successes if s)
-    # Allow off-by-one tolerance for racy refill computation
-    assert rate_limit.BUCKET_CAPACITY - 1 <= granted <= rate_limit.BUCKET_CAPACITY + 1
+    # rate_limit.acquire uses Redis WATCH/MULTI but reads tokens via rdb.get OUTSIDE
+    # the watched transaction (see pipeline/rate_limit.py). Under contention, a
+    # WatchError retry can read a stale value before the prior writer's SET is visible,
+    # which may grant one extra token. Tolerate +1 for this known race; never -1.
+    assert rate_limit.BUCKET_CAPACITY <= granted <= rate_limit.BUCKET_CAPACITY + 1
 
 
 def test_acquire_returns_true_when_redis_unavailable(monkeypatch, redis_client):
