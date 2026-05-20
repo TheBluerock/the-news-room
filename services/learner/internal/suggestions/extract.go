@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// openAIChatURL is a var (not const) so tests can swap it for an httptest server.
+var openAIChatURL = "https://api.openai.com/v1/chat/completions"
+
 // TopicSuggestion is one extracted editorial topic.
 type TopicSuggestion struct {
 	TopicID     string   `json:"topic_id"`
@@ -29,27 +32,6 @@ func ExtractFromTitles(ctx context.Context, apiKey, market string, titles []stri
 		titles = titles[:40]
 	}
 
-	prompt := fmt.Sprintf(
-		`You are an editorial analyst for %s wine and food journalism.
-Given these recent headlines from industry sources, identify the top %d topics most worth covering in an article this week.
-Respond ONLY with valid JSON array: [{"topic_id":"slug-format","topic_name":"Full Topic Name","source_count":<int>}]
-topic_id must be lowercase, hyphen-separated. source_count is how many headlines relate to that topic.
-
-Headlines:
-%s`,
-		market, limit, strings.Join(titles, "\n"),
-	)
-
-	body, _ := json.Marshal(map[string]interface{}{
-		"model": "gpt-4o",
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
-		"temperature":     0,
-		"response_format": map[string]string{"type": "json_object"},
-	})
-
-	// Wrap in object since response_format:json_object requires a root object
 	wrappedPrompt := fmt.Sprintf(
 		`You are an editorial analyst for %s wine and food journalism.
 Given these recent headlines from industry sources, identify the top %d topics most worth covering in an article this week.
@@ -61,7 +43,7 @@ Headlines:
 		market, limit, strings.Join(titles, "\n"),
 	)
 
-	body, _ = json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]interface{}{
 		"model": "gpt-4o",
 		"messages": []map[string]string{
 			{"role": "user", "content": wrappedPrompt},
@@ -71,7 +53,7 @@ Headlines:
 	})
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
+		openAIChatURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

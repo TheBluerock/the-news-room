@@ -301,7 +301,7 @@ func RecentSourceTitles(ctx context.Context, pool *pgxpool.Pool, market string, 
 		SELECT title, url
 		FROM learner_svc.sources
 		WHERE market = $1
-		  AND fetched_at > now() - ($2 || ' days')::interval
+		  AND fetched_at > now() - make_interval(days => $2)
 		  AND title IS NOT NULL AND title != ''
 		ORDER BY fetched_at DESC
 		LIMIT $3

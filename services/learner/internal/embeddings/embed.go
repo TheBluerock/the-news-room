@@ -9,10 +9,12 @@ import (
 )
 
 const (
-	openAIEmbeddingsURL = "https://api.openai.com/v1/embeddings"
-	embeddingModel      = "text-embedding-ada-002"
-	Dimension           = 1536
+	embeddingModel = "text-embedding-ada-002"
+	Dimension      = 1536
 )
+
+// openAIEmbeddingsURL is a var (not const) so tests can point at an httptest server.
+var openAIEmbeddingsURL = "https://api.openai.com/v1/embeddings"
 
 type embeddingRequest struct {
 	Input string `json:"input"`
