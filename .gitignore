@@ -28,6 +28,9 @@ infra/ansible/inventory.ini
 infra/ansible/group_vars/all.yml
 infra/ansible/*.retry
 
+# Personal/internal architecture audits — not for PR.
+documentation/architecture-audit-*.md
+
 # Secrets — never commit
 .env
 .env.*
