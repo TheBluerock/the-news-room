@@ -23,6 +23,11 @@ out/
 # Terraform — directory removed 2026-05-21 (deploy target = Docker Swarm).
 # If TF is re-introduced for K8s migration, restore these ignores.
 
+# Ansible — per-environment, secrets-bearing.
+infra/ansible/inventory.ini
+infra/ansible/group_vars/all.yml
+infra/ansible/*.retry
+
 # Secrets — never commit
 .env
 .env.*

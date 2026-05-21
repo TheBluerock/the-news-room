@@ -1,0 +1,74 @@
+---
+- name: Update apt cache + upgrade
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: safe
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - htop
+      - vim
+      - ufw
+      - jq
+      - rsync
+      - cron
+      - python3-pip
+      - rclone
+    state: present
+
+- name: Create admin user with sudo
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: sudo
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Allow admin sudo without password
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ admin_user }}"
+    content: "{{ admin_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    mode: "0440"
+
+- name: Apply sysctl tuning
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ sysctl_settings | dict2items }}"
+
+- name: Ensure /srv/newsroom data root exists
+  ansible.builtin.file:
+    path: "/srv/newsroom/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - postgres
+    - redis
+    - redpanda
+    - vault
+    - tempo
+    - prometheus
+    - grafana
+    - caddy
+    - backups
+
+- name: Disable swap (Swarm + Redis perf)
+  ansible.posix.mount:
+    name: swap
+    fstype: swap
+    state: absent
+
+- name: Set timezone to UTC
+  community.general.timezone:
+    name: Etc/UTC

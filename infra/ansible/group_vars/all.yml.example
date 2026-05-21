@@ -1,0 +1,36 @@
+---
+# Copy to group_vars/all.yml and edit. group_vars/all.yml is gitignored.
+
+# SSH user already provisioned with sudo access on each VPS.
+admin_user: deploy
+
+# Docker version pin. Verify available on Debian 12 / Ubuntu 24.04 via `apt-cache madison docker-ce`.
+docker_version: "5:27.3.1-1~debian.12~bookworm"
+
+# Subnet allowed to reach Docker daemon (only manager). Restrict tightly.
+docker_api_allowed_cidr: "127.0.0.1/32"
+
+# Swarm overlay subnet — must not collide with Contabo internal networks.
+swarm_default_addr_pool: "10.20.0.0/16"
+swarm_default_addr_pool_subnet_size: 24
+
+# Tempo / Prometheus retention.
+tempo_retention_hours: 168
+prometheus_retention_days: 30
+
+# Backup target (Backblaze B2 S3-compatible).
+backup_bucket: "newsroom-backups"
+backup_endpoint: "https://s3.eu-central-003.backblazeb2.com"
+# Backblaze application key id + key go in Vault, NOT here. Service reads from /run/secrets/.
+
+# Sysctl tuning for RedPanda + high-fanout consumer groups.
+sysctl_settings:
+  vm.max_map_count: 262144
+  fs.file-max: 1000000
+  net.core.somaxconn: 4096
+  net.ipv4.ip_local_port_range: "1024 65535"
+  net.ipv4.tcp_tw_reuse: 1
+
+# Open firewall ports (in addition to ssh + 80/443).
+swarm_ports_tcp: [2377, 7946]
+swarm_ports_udp: [7946, 4789]

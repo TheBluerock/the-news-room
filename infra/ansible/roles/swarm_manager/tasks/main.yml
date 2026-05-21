@@ -1,0 +1,30 @@
+---
+- name: Check if Swarm is already initialised
+  ansible.builtin.command: docker info --format '{% raw %}{{ .Swarm.LocalNodeState }}{% endraw %}'
+  register: swarm_state
+  changed_when: false
+
+- name: Initialise Swarm
+  ansible.builtin.command: >
+    docker swarm init
+    --advertise-addr {{ ansible_default_ipv4.address }}
+    --default-addr-pool {{ swarm_default_addr_pool }}
+    --default-addr-pool-mask-length {{ swarm_default_addr_pool_subnet_size }}
+  when: swarm_state.stdout != "active"
+  changed_when: true
+
+- name: Get manager join token
+  ansible.builtin.command: docker swarm join-token -q manager
+  register: manager_token
+  changed_when: false
+
+- name: Get worker join token
+  ansible.builtin.command: docker swarm join-token -q worker
+  register: worker_token
+  changed_when: false
+
+- name: Stash tokens as facts for other plays
+  ansible.builtin.set_fact:
+    swarm_manager_token: "{{ manager_token.stdout }}"
+    swarm_worker_token: "{{ worker_token.stdout }}"
+    swarm_manager_addr: "{{ ansible_default_ipv4.address }}:2377"

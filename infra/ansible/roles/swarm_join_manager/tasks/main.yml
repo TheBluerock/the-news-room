@@ -1,0 +1,13 @@
+---
+- name: Check current swarm state
+  ansible.builtin.command: docker info --format '{% raw %}{{ .Swarm.LocalNodeState }}{% endraw %}'
+  register: swarm_state
+  changed_when: false
+
+- name: Join Swarm as manager
+  ansible.builtin.command: >
+    docker swarm join
+    --token {{ hostvars[groups['swarm_managers'][0]].swarm_manager_token }}
+    {{ hostvars[groups['swarm_managers'][0]].swarm_manager_addr }}
+  when: swarm_state.stdout != "active"
+  changed_when: true

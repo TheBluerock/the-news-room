@@ -26,6 +26,8 @@ volumes:
     driver: local
   caddy_data:
     driver: local
+  backup_state:
+    driver: local
 
 x-vault-entrypoint: &vault-entrypoint
   entrypoint: ["/entrypoint.sh"]
@@ -439,6 +441,56 @@ services:
         constraints: [node.labels.role == app]
       <<: *app-deploy
 
+  # ── Backup cron (pg_dump + Vault snapshot → Backblaze B2) ─────────────────
+  backup:
+    image: postgres:18-alpine
+    user: "0:0"
+    networks: [newsroom_net]
+    secrets:
+      - postgres_password
+      - b2_application_key_id
+      - b2_application_key
+      - vault_token
+    environment:
+      PGUSER: newsroom
+      PGDATABASE: newsroom
+      PGHOST: postgres
+      BACKUP_BUCKET: "${BACKUP_BUCKET:-newsroom-backups}"
+      BACKUP_ENDPOINT: "${BACKUP_ENDPOINT:-https://s3.eu-central-003.backblazeb2.com}"
+      VAULT_ADDR: "${VAULT_ADDR}"
+    configs:
+      - source: backup_script
+        target: /usr/local/bin/run-backup.sh
+        mode: 0755
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        apk add --no-cache rclone curl jq tzdata
+        mkdir -p /etc/crontabs
+        cat > /etc/crontabs/root <<'CRON'
+        30 3 * * * /usr/local/bin/run-backup.sh pg    >> /var/backups/backup.log 2>&1
+        45 3 * * * /usr/local/bin/run-backup.sh vault >> /var/backups/backup.log 2>&1
+        00 4 1 * * /usr/local/bin/run-backup.sh audit >> /var/backups/backup.log 2>&1
+        CRON
+        chmod 600 /etc/crontabs/root
+        touch /var/backups/backup.log
+        echo "backup cron registered:"
+        cat /etc/crontabs/root
+        exec crond -f -d 8 -L /var/backups/backup.log
+    volumes:
+      - backup_state:/var/backups
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 60s
+      placement:
+        constraints: [node.labels.role == infra]
+      resources:
+        limits:   {cpus: "0.5", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+
 secrets:
   postgres_password:
     external: true
@@ -468,6 +520,12 @@ secrets:
     external: true
   vault_secret_id_sanity:
     external: true
+  b2_application_key_id:
+    external: true
+  b2_application_key:
+    external: true
+  vault_token:
+    external: true
 
 configs:
   tempo_config:
@@ -478,3 +536,5 @@ configs:
     file: ../caddy/Caddyfile
   entrypoint:
     file: ../docker/entrypoint.sh
+  backup_script:
+    file: ../scripts/run-backup.sh

@@ -3,9 +3,9 @@ name: Infrastructure
 on:
   push:
     branches: [main]
-    paths: ["infra/schemas/**", "infra/swarm/**"]
+    paths: ["infra/schemas/**", "infra/swarm/**", "infra/ansible/**", "infra/scripts/**"]
   pull_request:
-    paths: ["infra/schemas/**", "infra/swarm/**"]
+    paths: ["infra/schemas/**", "infra/swarm/**", "infra/ansible/**", "infra/scripts/**"]
 
 # Removed jobs (2026-05-21):
 #  - terraform-plan: infra/terraform/ is empty; deploy target = Docker Swarm on Contabo VPS
@@ -30,8 +30,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Docker Swarm stack files
+        env:
+          REGISTRY: ghcr.io/ci-stub
+          TAG: ci
+          VAULT_ADDR: http://vault:8200
+          BACKUP_BUCKET: ci-bucket
+          BACKUP_ENDPOINT: https://ci-endpoint
         run: |
           for f in infra/swarm/*.yml; do
             docker compose -f "$f" config --quiet || (echo "Invalid stack: $f" && exit 1)
           done
           echo "All swarm stacks valid."
+
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install ansible-core ansible-lint
+      - run: ansible-galaxy collection install -r infra/ansible/requirements.yml
+      - name: Syntax check + lint
+        run: |
+          cd infra/ansible
+          cp inventory.example.ini inventory.ini
+          cp group_vars/all.yml.example group_vars/all.yml
+          ansible-playbook bootstrap.yml --syntax-check
+          # Lint with profile=production once playbook stabilises; today: profile=basic to avoid noise.
+          ansible-lint --profile basic bootstrap.yml roles/
+
+  backup-script-shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck backup script
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: infra/scripts

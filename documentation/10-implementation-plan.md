@@ -46,7 +46,7 @@ Exit: `helm install newsroom infra/helm/newsroom --dry-run` clean on all 3 value
 
 ---
 
-## Phase C — Self-hosted bootstrap (3–5 days)
+## Phase C — Self-hosted bootstrap (PARTIAL — single-node done 2026-05-21; multi-node deferred)
 
 Target: Docker Swarm (already started in `infra/swarm/`). Drop Terraform. Delete empty `infra/terraform/`.
 
@@ -56,28 +56,36 @@ Target: Docker Swarm (already started in `infra/swarm/`). Drop Terraform. Delete
 - **Prod**: Contabo VPS L — ~€15/mo, 8vCPU/30GB/800GB NVMe.
 - Ansible playbook per Contabo (Debian 12 / Ubuntu 24.04).
 
-C1. ☐ Ansible playbook `infra/ansible/bootstrap.yml`:
-  - Install Docker + Swarm init on manager node.
-  - Join workers via swarm token.
-  - Sysctl tuning (vm.max_map_count for RedPanda, somaxconn).
-  - UFW/iptables: open 2377 (swarm), 7946, 4789; deny rest.
-  - Install node_exporter + promtail.
-C2. ☐ Compose stacks consolidated:
-  - `infra/swarm/stack.prod.yml` — all services + RedPanda + Postgres + Redis + Vault + Tempo + Grafana + Prometheus + Caddy.
-  - Use Docker secrets (not env vars) for bootstrap creds; Vault takes over runtime.
-  - Volumes on named host paths under `/srv/newsroom/{postgres,redis,redpanda,vault,tempo}`.
-C3. ☐ Postgres: streaming replica on second node (`pg_basebackup` + `recovery.conf`). Document failover steps in `ops/DR.md`.
-C4. ☐ Redis: AOF + RDB snapshots; replica on second node; HNSW requires RedisStack ≥7.2 image.
-C5. ☐ RedPanda: 3-node cluster (min for quorum); rack awareness via labels.
-C6. ☐ Vault: 3-node Raft cluster; auto-unseal via passphrase in HSM or KMS-equivalent (or manual unseal w/ documented runbook).
-C7. ☐ Backup cron:
-  - `pg_dump` nightly → Backblaze B2 (S3-compatible, cheap egress).
-  - Vault snapshot daily → B2.
-  - Audit log monthly archive → B2 con object lock 1y.
-  - Restore test quarterly.
-C8. ☐ Caddy auto-TLS via Let's Encrypt; config in `infra/caddy/Caddyfile`.
-C9. ☐ CI: `ansible-lint` + `docker stack config` validate on PR.
-C10. ☐ Deprecate Helm chart **or** keep for future K8s migration — decide and document in `infra/README.md`.
+C1. ✔ Ansible playbook `infra/ansible/bootstrap.yml`:
+  - Docker install via official apt repo (pinned version).
+  - Swarm init on first manager; idempotent join for additional managers + workers.
+  - Sysctl tuning (vm.max_map_count, somaxconn, port range, tcp_tw_reuse).
+  - UFW: deny incoming default + allow SSH (rate-limited) + 80/443 + per-peer swarm ports.
+  - node_exporter + cAdvisor as standalone containers (always-up).
+  - Roles: common, firewall, docker, observability, swarm_manager, swarm_join_manager, swarm_join_worker.
+  - Syntax check passes; `requirements.yml` declares collections.
+C2. ◐ Stack `infra/swarm/stack.prod.yml` already consolidated (480→520 lines). Added: `backup` service, `b2_application_key_id/key`, `vault_token` secrets, `backup_state` volume, `backup_script` config. Volumes still on Docker-managed paths; pinning to `/srv/newsroom/*` deferred (cosmetic).
+C3. ☐ **Deferred to multi-node phase.** Postgres replica needs second VPS; single-node staging OK initially.
+C4. ☐ **Deferred to multi-node phase.** Redis replica + AOF: AOF can be enabled in stack today (one-line), replica needs second VPS.
+C5. ☐ **Deferred to multi-node phase.** RedPanda 3-node quorum needs 3 VPS.
+C6. ☐ **Deferred to multi-node phase.** Vault 3-node Raft needs 3 VPS; staging uses dev-mode unseal.
+C7. ✔ Backup cron service:
+  - `infra/scripts/run-backup.sh` — pg_dump | vault snapshot | audit_log monthly.
+  - Crontab baked into container entrypoint: 03:30 daily PG, 03:45 daily Vault, 04:00 monthly audit.
+  - Upload via rclone → Backblaze B2 (S3-compat).
+  - ShellCheck-clean.
+C8. ◐ Caddy auto-TLS — Caddyfile present in `infra/caddy/`; verify it issues Let's Encrypt certs on first deploy (manual test post-VPS).
+C9. ✔ CI `.github/workflows/infra.yml`:
+  - `swarm-config` — `docker compose config` validates stack files.
+  - `ansible-lint` — syntax check + `ansible-lint --profile basic`.
+  - `backup-script-shellcheck` — runs shellcheck on `infra/scripts/`.
+C10. ✔ Helm chart deprecated (`infra/helm/DEPRECATED.md` done in Phase A).
+
+**Files added:** `infra/ansible/{ansible.cfg, bootstrap.yml, inventory.example.ini, requirements.yml, group_vars/all.yml.example, roles/{common,firewall,docker,observability,swarm_manager,swarm_join_manager,swarm_join_worker}/tasks/main.yml}`, `infra/scripts/run-backup.sh`, `infra/README.md`.
+
+**What's deferred (needs real VPS to test):** multi-node HA (PG replica, Redis replica, RedPanda 3-node, Vault 3-node Raft), restore drill rehearsal, Caddy LE issuance verification.
+
+**Exit:** ready to run on fresh Contabo VPS S → single-node staging fully functional. Multi-node prod hardening = follow-up after first staging deploy validates the playbook.
 
 Exit: fresh VPS → `ansible-playbook bootstrap.yml` → `docker stack deploy` → smoke test green.
 

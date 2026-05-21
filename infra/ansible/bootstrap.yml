@@ -1,0 +1,59 @@
+---
+# Bootstrap one or more Contabo VPS nodes into a Docker Swarm cluster.
+# Idempotent: safe to re-run. Detects existing swarm membership.
+#
+# Usage:
+#   cd infra/ansible
+#   cp inventory.example.ini inventory.ini && $EDITOR inventory.ini
+#   cp group_vars/all.yml.example group_vars/all.yml && $EDITOR group_vars/all.yml
+#   ansible-playbook bootstrap.yml --ask-become-pass
+#
+# After this completes:
+#   1. Create Docker secrets (see ops/DEPLOY.md).
+#   2. docker stack deploy -c infra/swarm/stack.prod.yml newsroom
+
+- name: Common host hardening + Docker install
+  hosts: swarm
+  become: true
+  roles:
+    - common
+    - firewall
+    - docker
+    - observability
+
+- name: Initialise Swarm cluster on first manager
+  hosts: swarm_managers[0]
+  become: true
+  roles:
+    - swarm_manager
+
+- name: Join additional managers
+  hosts: swarm_managers[1:]
+  become: true
+  roles:
+    - swarm_join_manager
+
+- name: Join worker nodes
+  hosts: swarm_workers
+  become: true
+  roles:
+    - swarm_join_worker
+
+- name: Label nodes for placement constraints (infra / app)
+  hosts: swarm_managers[0]
+  become: true
+  tasks:
+    - name: Label all nodes per inventory role_label
+      ansible.builtin.command: >
+        docker node update --label-add role={{ hostvars[item].role_label | default('app') }} {{ item }}
+      loop: "{{ groups['swarm'] }}"
+      changed_when: true
+
+    - name: Print swarm status
+      ansible.builtin.command: docker node ls
+      changed_when: false
+      register: nodes_out
+
+    - name: Show swarm topology
+      ansible.builtin.debug:
+        var: nodes_out.stdout_lines

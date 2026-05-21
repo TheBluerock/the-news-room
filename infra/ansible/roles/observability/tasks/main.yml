@@ -1,0 +1,40 @@
+---
+# Host-level metrics for Prometheus to scrape.
+# Runs as a Docker container managed outside Swarm (always-up regardless of stack state).
+- name: Pull node_exporter image
+  community.docker.docker_image_pull:
+    name: prom/node-exporter:v1.8.2
+
+- name: Run node_exporter container
+  community.docker.docker_container:
+    name: node_exporter
+    image: prom/node-exporter:v1.8.2
+    restart_policy: always
+    network_mode: host
+    pid_mode: host
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - "/:/host:ro,rslave"
+    labels:
+      role: "observability"
+
+- name: Pull cAdvisor image (per-container metrics)
+  community.docker.docker_image_pull:
+    name: gcr.io/cadvisor/cadvisor:v0.49.1
+
+- name: Run cAdvisor
+  community.docker.docker_container:
+    name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart_policy: always
+    network_mode: host
+    privileged: true
+    volumes:
+      - "/:/rootfs:ro"
+      - "/var/run:/var/run:rw"
+      - "/sys:/sys:ro"
+      - "/var/lib/docker/:/var/lib/docker:ro"
+      - "/dev/disk/:/dev/disk:ro"
+    labels:
+      role: "observability"
