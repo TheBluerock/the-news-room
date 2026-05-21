@@ -168,6 +168,28 @@ groups:
         annotations:
           summary: "Stale metrics from {{ $labels.job }}"
 
+  # ── GDPR deletion lag ─────────────────────────────────────────────────────
+  - name: newsroom.gdpr
+    rules:
+      - alert: GDPRDeletionLag
+        expr: gdpr_user_deletions_pending_total > 0
+        for: 0s
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "{{ $value }} GDPR deletion(s) pending past 25-day soft cutoff"
+          description: |
+            One or more user.data.deletion.requested events have been in the
+            auth_svc.user_deletions ledger for >25 days without all services
+            stamping in. Legal cutoff is 30 days. Investigate which downstream
+            service has not ack'd — query:
+              SELECT user_id, requested_at, services_completed
+              FROM auth_svc.user_deletions
+              WHERE completed_at IS NULL
+              ORDER BY requested_at ASC;
+            Runbook: ops/GDPR-DELETION-LAG.md
+
   # ── Backup ────────────────────────────────────────────────────────────────
   - name: newsroom.backup
     rules:

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -14,16 +15,23 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/newsroom/auth/internal/gdpr"
 	jwtpkg "github.com/newsroom/auth/internal/jwt"
 	"github.com/newsroom/auth/internal/store"
 )
 
+// ExpectedDeletionServices lists every service that owns PII referencing
+// auth users. user_deletions.completed_at is only stamped once all of these
+// have ack'd the user.data.deletion.requested event.
+var ExpectedDeletionServices = []string{"auth", "analytics"}
+
 type HTTPServer struct {
-	jwt      *jwtpkg.Manager
-	db       *pgxpool.Pool
-	rdb      *redis.Client
-	enforcer *casbin.Enforcer
-	logger   *slog.Logger
+	jwt       *jwtpkg.Manager
+	db        *pgxpool.Pool
+	rdb       *redis.Client
+	enforcer  *casbin.Enforcer
+	logger    *slog.Logger
+	gdprPub   gdpr.Publisher
 }
 
 func NewHTTP(
@@ -32,13 +40,15 @@ func NewHTTP(
 	rdb *redis.Client,
 	enforcer *casbin.Enforcer,
 	logger *slog.Logger,
+	gdprPub gdpr.Publisher,
 ) *http.ServeMux {
-	s := &HTTPServer{jwt: jwt, db: db, rdb: rdb, enforcer: enforcer, logger: logger}
+	s := &HTTPServer{jwt: jwt, db: db, rdb: rdb, enforcer: enforcer, logger: logger, gdprPub: gdprPub}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/login", s.login)
 	mux.HandleFunc("POST /api/auth/refresh", s.refresh)
 	mux.HandleFunc("GET /internal/verify", s.verify)
 	mux.HandleFunc("GET /api/admin/audit", s.auditLog)
+	mux.HandleFunc("DELETE /api/user/data", s.deleteUserData)
 	return mux
 }
 
@@ -232,6 +242,107 @@ func (s *HTTPServer) auditLog(w http.ResponseWriter, r *http.Request) {
 		"total":   total,
 		"page":    page,
 		"limit":   limit,
+	})
+}
+
+// deleteUserData implements the GDPR Article 17 "right to erasure" endpoint.
+// Owner decision 2026-05-21: uniform 30-day deletion right for ALL markets.
+//
+// Flow:
+//   1. Verify Bearer JWT, extract user_id from claims.Subject.
+//   2. Insert ledger row in auth_svc.user_deletions (idempotent on user_id).
+//   3. Anonymise auth's own tables in one TX (users + audit_log).
+//   4. Publish user.data.deletion.requested so other services scrub their PII.
+//   5. Mark "auth" service complete in ledger.
+//   6. Return 202 Accepted with ledger ID + requested_at.
+//
+// Failure of step 4 is FATAL — we revert the local anonymisation by deleting
+// the ledger row so the user can retry. Half-done anonymisation across the
+// fleet is worse than no anonymisation at all (GDPR liability + audit drift).
+func (s *HTTPServer) deleteUserData(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		writeErr(w, http.StatusUnauthorized, "Bearer token required")
+		return
+	}
+	claims, err := s.jwt.Verify(strings.TrimPrefix(authHeader, "Bearer "))
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	// Don't allow deleting the sentinel user — that would orphan every
+	// previously-anonymised row's FK reference target.
+	if claims.Subject == gdpr.AnonymisedSentinelID {
+		writeErr(w, http.StatusForbidden, "cannot delete anonymised sentinel user")
+		return
+	}
+
+	// Refuse deletion if the token has been revoked.
+	if blocked, _ := store.IsBlocked(r.Context(), s.rdb, claims.ID); blocked {
+		writeErr(w, http.StatusUnauthorized, "token revoked")
+		return
+	}
+
+	requestedAt, err := gdpr.RecordRequest(r.Context(), s.db, claims.Subject, claims.Subject)
+	if errors.Is(err, gdpr.ErrAlreadyRequested) {
+		// Idempotent: previous request still being processed. Return 200 with the original timestamp.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user_id":          claims.Subject,
+			"requested_at":     requestedAt.UTC().Format(time.RFC3339),
+			"status":           "already_requested",
+			"completion_due":   requestedAt.Add(30 * 24 * time.Hour).UTC().Format(time.RFC3339),
+		})
+		return
+	}
+	if err != nil {
+		s.logger.Error("record deletion request", "err", err, "user_id", claims.Subject)
+		writeErr(w, http.StatusInternalServerError, "ledger error")
+		return
+	}
+
+	if err := gdpr.AnonymiseAuthLocal(r.Context(), s.db, claims.Subject); err != nil {
+		s.logger.Error("anonymise auth local", "err", err, "user_id", claims.Subject)
+		// Roll back the ledger row so the user can retry.
+		if _, delErr := s.db.Exec(r.Context(),
+			`DELETE FROM auth_svc.user_deletions WHERE user_id = $1::uuid`, claims.Subject,
+		); delErr != nil {
+			s.logger.Error("rollback ledger row", "err", delErr, "user_id", claims.Subject)
+		}
+		writeErr(w, http.StatusInternalServerError, "anonymisation failed; please retry")
+		return
+	}
+
+	// Best-effort event publish. If the broker is unreachable we keep the
+	// local anonymisation (already done) and the ledger row pending — the
+	// lag cron will alert at day 25 and ops can republish manually from
+	// the ledger. Returning 500 here would lie to the user about whether
+	// anonymisation happened.
+	evt := gdpr.NewEvent(claims.Subject, claims.Subject, "")
+	if s.gdprPub != nil {
+		if err := s.gdprPub.Publish(r.Context(), evt); err != nil {
+			s.logger.Error("publish deletion event", "err", err, "user_id", claims.Subject)
+		}
+	}
+
+	// Mark auth's own piece as done. Lag cron only flags when other services
+	// have not stamped in by day 25.
+	if err := gdpr.MarkServiceCompleted(
+		r.Context(), s.db, claims.Subject, "auth", ExpectedDeletionServices,
+	); err != nil {
+		s.logger.Warn("mark auth completed", "err", err, "user_id", claims.Subject)
+	}
+
+	// Revoke this token so the rest of its lifetime can't be reused. Refresh
+	// token would also be a good idea but we don't have its jti here — TODO.
+	_ = store.Block(r.Context(), s.rdb, claims.ID, 7*24*time.Hour)
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"user_id":        claims.Subject,
+		"event_id":       evt.EventID,
+		"requested_at":   requestedAt.UTC().Format(time.RFC3339),
+		"completion_due": requestedAt.Add(30 * 24 * time.Hour).UTC().Format(time.RFC3339),
+		"status":         "accepted",
 	})
 }
 

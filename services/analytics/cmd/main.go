@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 
 	adminhttp "github.com/newsroom/analytics/internal/adminhttp"
+	"github.com/newsroom/analytics/internal/gdpr"
 	grpcserver "github.com/newsroom/analytics/internal/grpc"
 	"github.com/newsroom/analytics/internal/telemetry"
 	"github.com/newsroom/analytics/internal/tracker"
@@ -91,6 +92,14 @@ func main() {
 	go func() {
 		if err := tracker.RunPublishedConsumer(ctx, brokers, db, logger); err != nil && ctx.Err() == nil {
 			logger.Error("published consumer exited", "err", err)
+		}
+	}()
+
+	// GDPR deletion consumer (Phase K2) — anonymises editorial_calendar.created_by
+	// + stamps auth_svc.user_deletions ledger.
+	go func() {
+		if err := gdpr.Run(ctx, brokers, db, logger); err != nil && ctx.Err() == nil {
+			logger.Error("gdpr consumer exited", "err", err)
 		}
 	}()
 

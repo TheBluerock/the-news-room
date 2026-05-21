@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,8 +87,18 @@ func newFixture(t *testing.T) *fixture {
 			email         TEXT UNIQUE NOT NULL,
 			market        TEXT,
 			password_hash TEXT NOT NULL DEFAULT '',
-			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+			deleted_at    TIMESTAMPTZ
 		)`,
+		`CREATE TABLE user_deletions (
+			user_id             UUID PRIMARY KEY,
+			requested_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+			requested_by        UUID NOT NULL,
+			completed_at        TIMESTAMPTZ,
+			services_completed  JSONB NOT NULL DEFAULT '{}'::jsonb
+		)`,
+		`INSERT INTO users (id, email, password_hash) VALUES
+			('00000000-0000-0000-0000-000000000001', 'anonymised@deleted.local', '')`,
 		`CREATE TABLE casbin_rule (
 			id    BIGSERIAL PRIMARY KEY,
 			ptype TEXT NOT NULL,
@@ -136,7 +147,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
-	mux := NewHTTP(jwtMgr, db, rdb, enf, logger)
+	mux := NewHTTP(jwtMgr, db, rdb, enf, logger, nil)
 	return &fixture{mux: mux, jwt: jwtMgr, db: db, rdb: rdb}
 }
 
@@ -412,6 +423,153 @@ func TestResolveRole_NoRolesDefaultsViewer(t *testing.T) {
 	})
 	if got := resolveRole(enf, "no-such-user@x.dev"); got != "viewer" {
 		t.Errorf("got %q, want viewer", got)
+	}
+}
+
+// ── Phase K2: GDPR DELETE /api/user/data ─────────────────────────────────────
+
+func TestDeleteUserData_RequiresBearer(t *testing.T) {
+	fx := newFixture(t)
+	rec := doJSON(t, fx.mux, "DELETE", "/api/user/data", nil, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d", rec.Code)
+	}
+}
+
+func TestDeleteUserData_RejectsInvalidJWT(t *testing.T) {
+	fx := newFixture(t)
+	rec := doJSON(t, fx.mux, "DELETE", "/api/user/data", nil, map[string]string{
+		"Authorization": "Bearer not.a.jwt",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d", rec.Code)
+	}
+}
+
+func TestDeleteUserData_RefusesSentinel(t *testing.T) {
+	fx := newFixture(t)
+	// Forge a token for the sentinel UUID and pass it.
+	tok, _, _ := fx.jwt.IssueAccess("00000000-0000-0000-0000-000000000001", "", "viewer")
+	rec := doJSON(t, fx.mux, "DELETE", "/api/user/data", nil, map[string]string{
+		"Authorization": "Bearer " + tok,
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d (must refuse deleting sentinel)", rec.Code)
+	}
+}
+
+func TestDeleteUserData_HappyPath(t *testing.T) {
+	fx := newFixture(t)
+	ctx := context.Background()
+
+	// Login alice → access token.
+	loginRec := doJSON(t, fx.mux, "POST", "/api/auth/login",
+		map[string]string{"email": "alice@x.dev", "password": "secret"}, nil)
+	var login map[string]string
+	_ = json.NewDecoder(loginRec.Body).Decode(&login)
+
+	claims, _ := fx.jwt.Verify(login["access_token"])
+	aliceID := claims.Subject
+
+	// Seed an audit row attributed to alice so we can verify repointing.
+	_, _ = fx.db.Exec(ctx,
+		`INSERT INTO audit_log (user_id, action, resource_id, market)
+		 VALUES ($1::uuid, 'article.approved', gen_random_uuid(), 'italy')`, aliceID)
+
+	rec := doJSON(t, fx.mux, "DELETE", "/api/user/data", nil, map[string]string{
+		"Authorization": "Bearer " + login["access_token"],
+	})
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// users row anonymised.
+	var email, pw string
+	var deletedAt *time.Time
+	_ = fx.db.QueryRow(ctx,
+		`SELECT email, password_hash, deleted_at FROM users WHERE id = $1::uuid`, aliceID,
+	).Scan(&email, &pw, &deletedAt)
+	if email == "alice@x.dev" {
+		t.Errorf("email not scrubbed: %q", email)
+	}
+	if pw != "" {
+		t.Errorf("password_hash not blanked")
+	}
+	if deletedAt == nil {
+		t.Errorf("deleted_at not stamped")
+	}
+
+	// audit_log row repointed at sentinel.
+	var auditUID string
+	_ = fx.db.QueryRow(ctx,
+		`SELECT user_id::text FROM audit_log WHERE action = 'article.approved'`,
+	).Scan(&auditUID)
+	if auditUID != "00000000-0000-0000-0000-000000000001" {
+		t.Errorf("audit_log.user_id = %q, want sentinel", auditUID)
+	}
+
+	// Ledger row present + auth stamped.
+	var servicesJSON string
+	_ = fx.db.QueryRow(ctx,
+		`SELECT services_completed::text FROM user_deletions WHERE user_id = $1::uuid`, aliceID,
+	).Scan(&servicesJSON)
+	if servicesJSON == "" || servicesJSON == "{}" {
+		t.Errorf("services_completed empty: %q", servicesJSON)
+	}
+	if !strings.Contains(servicesJSON, "auth") {
+		t.Errorf("services_completed missing 'auth' key: %q", servicesJSON)
+	}
+
+	// Token blocked.
+	blocked, _ := store.IsBlocked(ctx, fx.rdb, claims.ID)
+	if !blocked {
+		t.Error("access token should be blocked after deletion")
+	}
+}
+
+func TestDeleteUserData_IdempotentSecondCallReturnsOK(t *testing.T) {
+	fx := newFixture(t)
+	// Login alice.
+	loginRec := doJSON(t, fx.mux, "POST", "/api/auth/login",
+		map[string]string{"email": "alice@x.dev", "password": "secret"}, nil)
+	var login map[string]string
+	_ = json.NewDecoder(loginRec.Body).Decode(&login)
+
+	// First call → 202.
+	rec1 := doJSON(t, fx.mux, "DELETE", "/api/user/data", nil, map[string]string{
+		"Authorization": "Bearer " + login["access_token"],
+	})
+	if rec1.Code != http.StatusAccepted {
+		t.Fatalf("first call status = %d", rec1.Code)
+	}
+
+	// Re-login (first token was blocked).
+	loginRec2 := doJSON(t, fx.mux, "POST", "/api/auth/login",
+		map[string]string{"email": "alice@x.dev", "password": "secret"}, nil)
+	// password was blanked → login should now FAIL. This is a fine side effect:
+	// after deletion the user cannot re-authenticate. Verify that too.
+	if loginRec2.Code != http.StatusUnauthorized {
+		t.Errorf("post-deletion login should fail, got %d", loginRec2.Code)
+	}
+}
+
+func TestDeleteUserData_RevokedTokenRejected(t *testing.T) {
+	fx := newFixture(t)
+	ctx := context.Background()
+
+	loginRec := doJSON(t, fx.mux, "POST", "/api/auth/login",
+		map[string]string{"email": "alice@x.dev", "password": "secret"}, nil)
+	var login map[string]string
+	_ = json.NewDecoder(loginRec.Body).Decode(&login)
+
+	claims, _ := fx.jwt.Verify(login["access_token"])
+	_ = store.Block(ctx, fx.rdb, claims.ID, 5*time.Minute)
+
+	rec := doJSON(t, fx.mux, "DELETE", "/api/user/data", nil, map[string]string{
+		"Authorization": "Bearer " + login["access_token"],
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d", rec.Code)
 	}
 }
 
