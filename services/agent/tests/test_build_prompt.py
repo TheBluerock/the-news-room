@@ -1,4 +1,4 @@
-"""Pure unit tests for pipeline.py:_build_prompt + MARKET_SYSTEM_PROMPTS."""
+"""Pure unit tests for graph.py:_build_prompt + MARKET_SYSTEM_PROMPTS."""
 from __future__ import annotations
 
 import pytest

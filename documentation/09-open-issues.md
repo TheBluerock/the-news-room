@@ -275,7 +275,7 @@ No token consumption or cost data is captured anywhere. OpenAI responses include
 **Approved approach (to be implemented):**
 
 Pipeline change — token data flows alongside article from generation to storage:
-1. `services/agent/pipeline.py` — `generate` node reads `response.usage` (`prompt_tokens`, `completion_tokens`, `model`) from OpenAI response, stores in `ArticleState`.
+1. `services/agent/graph.py` — `generate` node reads `response.usage` (`prompt_tokens`, `completion_tokens`, `model`) from OpenAI response, stores in `ArticleState`. (File was `pipeline.py`, renamed during Phase D test work to avoid shadowing `pipeline/` package.)
 2. `services/agent/pipeline/publisher.py` — includes `prompt_tokens`, `completion_tokens`, `model` in `article.generated` payload.
 3. `services/moderation/consumer.py` — forwards token fields through `article.approved` event and passes to `RecordQualityScore` gRPC call.
 4. `proto/analytics.proto` — adds `prompt_tokens`, `completion_tokens`, `model` to `QualityRequest` message.

@@ -6,14 +6,22 @@ Status legend: ☐ todo · ◐ partial · ✔ done.
 
 ---
 
-## Phase A — Cleanup (1–2 days, no risk)
+## Phase A — Cleanup (DONE 2026-05-21)
 
-A1. ☐ Remove stale `.github/workflows/correction.yml` — service absorbed into learner (REF-01).
-A2. ☐ Audit `frontend/app/` vs `frontend/src/` — delete leftover Next.js scaffold per memory `project_frontend_stack`.
-A3. ☐ Resolve duplicate pipeline in `services/agent/`: `pipeline.py` vs `pipeline/` dir. Pick one, delete other.
-A4. ☐ Deploy target = Docker Swarm. Update CLAUDE.md (remove "K8s-first" line). Mark `infra/helm/` deprecated or delete.
+A1. ✔ `.github/workflows/correction.yml` — kept as intentional tombstone (workflow_dispatch only, prevents accidental recreation; explains REF-01).
+A2. ✔ `frontend/app/` deleted (was empty Next.js scaffold residue).
+A3. ✔ `services/agent/pipeline.py` → `graph.py` (done during Phase D; consumer.py import updated).
+A4. ✔ Deploy target = Docker Swarm:
+  - CLAUDE.md updated (3 lines: layout, Vault sidecar, deployment paragraph).
+  - `infra/helm/DEPRECATED.md` added explaining status + revival steps.
+  - `infra/terraform/` empty dir removed; `.gitignore` lines pruned.
+  - `.github/workflows/infra.yml` rewritten: terraform-plan + helm-lint jobs removed, swarm-config validate added.
 
-Exit criteria: `git grep -l correction-service` clean; one frontend tree; one pipeline module; one deploy story.
+**Exit criteria met:**
+- `git grep correction-service` → only docs/tombstone.
+- Single frontend tree (`frontend/src/`).
+- Single pipeline module (`graph.py`).
+- Single deploy story (Swarm; Helm dormant + documented).
 
 ---
 

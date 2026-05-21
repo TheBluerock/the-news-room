@@ -3,37 +3,35 @@ name: Infrastructure
 on:
   push:
     branches: [main]
-    paths: ["infra/terraform/**", "infra/helm/**", "infra/schemas/**"]
+    paths: ["infra/schemas/**", "infra/swarm/**"]
   pull_request:
-    paths: ["infra/terraform/**", "infra/helm/**", "infra/schemas/**"]
+    paths: ["infra/schemas/**", "infra/swarm/**"]
+
+# Removed jobs (2026-05-21):
+#  - terraform-plan: infra/terraform/ is empty; deploy target = Docker Swarm on Contabo VPS
+#    (see documentation/10-implementation-plan.md Phase C and memory project-deploy-target).
+#  - helm-lint: infra/helm/ is deprecated (see infra/helm/DEPRECATED.md). K8s migration deferred.
+# Re-add only if Terraform or Helm are reactivated.
 
 jobs:
-  terraform-plan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - run: cd infra/terraform && terraform init
-      - run: cd infra/terraform && terraform validate
-      - run: cd infra/terraform && terraform plan -out=tfplan
-        env:
-          TF_VAR_vault_addr: ${{ secrets.VAULT_ADDR }}
-
   schema-compatibility:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check schema backward compatibility
+      - name: Validate all event schemas parse as JSON
         run: |
-          # Validate all schemas are valid JSON Schema
           for f in infra/schemas/*.json; do
             python3 -c "import json,sys; json.load(open('$f'))" || (echo "Invalid JSON: $f" && exit 1)
           done
           echo "All schemas valid."
 
-  helm-lint:
+  swarm-config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
-      - run: helm lint infra/helm/newsroom
+      - name: Validate Docker Swarm stack files
+        run: |
+          for f in infra/swarm/*.yml; do
+            docker compose -f "$f" config --quiet || (echo "Invalid stack: $f" && exit 1)
+          done
+          echo "All swarm stacks valid."

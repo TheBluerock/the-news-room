@@ -26,7 +26,9 @@ newsroom/
 ├── proto/            # Shared gRPC definitions
 ├── infra/
 │   ├── terraform/
-│   ├── helm/newsroom/        # Kubernetes Helm chart + Argo Rollouts config
+│   ├── helm/newsroom/        # DEPRECATED — kept for future K8s migration; not used in prod (see infra/helm/DEPRECATED.md)
+│   ├── swarm/                # Docker Swarm stacks (active deploy target)
+│   ├── ansible/              # Contabo VPS bootstrap playbook
 │   ├── vault/                # Vault policies + Vault Agent sidecar config
 │   ├── schemas/              # RedPanda Schema Registry (Avro/JSON Schema)
 │   ├── migrations/postgres/  # golang-migrate SQL files (NNN_name.up/down.sql)
@@ -72,7 +74,7 @@ moderation.rejected (Moderation → Learner + Correction Processor)
 ```
 
 ### Secrets — HashiCorp Vault + Agent Sidecar
-Every K8s pod runs a `vault-agent` sidecar that writes credentials to `/vault/secrets/` on a shared tmpfs volume. Services read secrets from the filesystem — never from env vars. Vault auto-rotates PostgreSQL/Redis passwords every 30 days without service restarts. JWT RS256 key rotation uses a 15-minute overlap window. Local dev uses Vault dev mode seeded by `make vault-seed`.
+Every service container (Docker Swarm) runs a `vault-agent` sidecar that writes credentials to `/vault/secrets/` on a shared tmpfs volume. Services read secrets from the filesystem — never from env vars. Vault auto-rotates PostgreSQL/Redis passwords every 30 days without service restarts. JWT RS256 key rotation uses a 15-minute overlap window. Local dev uses Vault dev mode seeded by `make vault-seed`.
 
 ### Health Endpoints (every service)
 All services expose on **port 8090** (independent of the main gRPC/HTTP port):
@@ -107,7 +109,7 @@ Per-market circuit breaker on all LLM calls. Primary: OpenAI GPT-4o. Fallback: A
 `audit_log` table in PostgreSQL — no UPDATE or DELETE granted to any service role. Logs: article approvals/rejections, corrections, role changes, correction reversals. Exposed to Admin role only via `GET /api/admin/audit`. Retained 1 year, then archived to S3.
 
 ### CI/CD — GitHub Actions + Argo Rollouts
-Per-service workflow files in `.github/workflows/` with path filtering. Pipeline: PR → tests only; merge to main → test → build → push image → run migrations → deploy staging (auto); staging verified → canary to production (5% → 50% → 100% over ~10 min). Auto-rollback if error rate >1% OR p99 latency increases >50% for 2 minutes. Manual rollback: `helm rollback newsroom [revision]` — full procedure in `ops/ROLLBACK.md`.
+Per-service workflow files in `.github/workflows/` with path filtering. Pipeline: PR → tests only; merge to main → test → build → push image → run migrations → deploy staging (auto); staging verified → progressive prod rollout via `docker service update --update-parallelism 1 --update-delay 30s`. Auto-rollback on healthcheck failure (`--rollback` triggers on `--update-failure-action`). Manual rollback: `docker service rollback newsroom_<service>` — full procedure in `ops/ROLLBACK.md`.
 
 ### DLQ Strategy
 Every RedPanda consumer topic has a corresponding `*.dlq` topic. Retry backoff: 5s → 30s → 2m → DLQ. DLQ depth >0 triggers immediate Grafana alert. Use `cmd/dlq-tool` CLI for inspection and replay. Runbook: `ops/DLQ-handling.md`.
@@ -116,7 +118,7 @@ Every RedPanda consumer topic has a corresponding `*.dlq` topic. Retry backoff: 
 
 Phase 1 (Foundation) → Phase 2 (Observability — **never skip, instrument before building AI**) → Phase 3 (Core AI Pipeline) → Phase 4 (Frontend & Analytics) → Phase 5 (CI/CD & Hardening)
 
-Deployment is microservices-first on Kubernetes from Phase 1 — each service has its own Dockerfile and CI pipeline. Do not build a monolith first.
+Deployment is microservices-first on Docker Swarm (Contabo VPS) from Phase 1 — each service has its own Dockerfile and CI pipeline. Do not build a monolith first. K8s/Helm chart deferred — see `infra/helm/DEPRECATED.md`.
 
 ## Key Constraints
 
