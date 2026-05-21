@@ -8,8 +8,8 @@ opentelemetry-instrumentation-fastapi
 prometheus-client>=0.20.0
 confluent-kafka==2.4.0
 jsonschema==4.22.0
-grpcio==1.64.0
-grpcio-tools==1.64.0
+grpcio==1.80.0
+grpcio-tools==1.80.0
 hvac==2.3.0
 openai==1.35.3
 anthropic==0.29.0

@@ -146,6 +146,56 @@ H5. ☐ Dependabot or Renovate on Go/Python/Helm.
 
 ---
 
+## Phase I — Web analytics integration (2–3 days, deferred)
+
+Goal: close feedback loop — real reader behavior (page views, dwell time, bounce) feeds into `analytics_svc.article_performance.quality_score`, which agent prompts read as quality signal.
+
+Note: Phase I is the last phase and runs after Phase H. Kept lettered "I" (not renamed) so cross-references in code/comments referencing Phase I remain valid.
+
+**Decision (2026-05-20):** Use **Plausible self-hosted**, NOT Google Analytics.
+
+**Why Plausible over GA4:**
+- Italian DPA (Garante) declared GA4 incompatible with GDPR 2022–2024. Frontend serves IT → blocker.
+- No cookie banner needed (Plausible is cookieless) → ~40% more data captured (no consent-blocked users).
+- Already self-hosted ethos (Contabo VPS).
+- Real-time stats API (vs GA4 24–48h aggregation delay).
+- ~200MB RAM, single Docker container — fits on same Contabo VPS S.
+- Vendor neutral, no Google lock-in.
+- Free self-hosted, no quota.
+
+**Alternatives considered:**
+- Umami (similar profile, less mature API).
+- PostHog (richer feature-flag layer, heavier).
+- GA4 + `cloud.google.com/go/analyticsdata/apiv1beta` — fallback only if a client mandates GA4.
+
+I1. ☐ Add Plausible to `infra/swarm/stack.{dev,prod}.yml` (image: `plausible/analytics:v2.1.4` — pinned for reproducible deploys, bump via PR after staging validation; ~200MB RAM, port 8000 internal, behind Caddy at `analytics.newsroom.dev`).
+I2. ☐ Provision Postgres + Clickhouse for Plausible (or share existing Postgres with new DB).
+I3. ☐ Frontend (Astro): add Plausible script tag, configure per-market site IDs.
+I4. ☐ New Go module `services/analytics/internal/plausible/fetcher.go`:
+  - `FetchPageViews(ctx, siteID, dateRange) → map[articleSlug]int`
+  - `FetchDwellTime(ctx, siteID, dateRange) → map[articleSlug]float64`
+  - HTTP GET on `/api/v1/stats/breakdown` — no SDK needed, `net/http` + JSON decode.
+I5. ☐ Cron loop in `services/analytics/cmd/main.go`: fetch hourly, upsert into `analytics_svc.article_performance` (add columns `view_count INT`, `avg_dwell_seconds FLOAT`).
+I6. ☐ Migration: `infra/migrations/postgres/NNN_article_performance_engagement.up.sql` — add columns + index on view_count.
+I7. ☐ Update `db.GetMarketQualitySummary` (learner) to blend Plausible signal into `avg_quality_score` calculation. Weight: 0.6 LLM heuristic + 0.4 reader engagement.
+  - **Cross-service dependency:** this task modifies code in `services/learner/`, not analytics. Coordinate the PR with the learner owner; do not merge analytics-side changes (I5/I6) until learner-side blend logic is reviewed and merged. Document the blended-score contract in `services/learner/internal/db/README.md` so a future analytics change cannot silently break learner behavior.
+I8. ☐ Test coverage:
+  - Analytics side: testcontainers Plausible mock via httptest; integration test for the hourly cron loop end-to-end.
+  - Learner side: extend `services/learner/internal/db/*_test.go` to cover `GetMarketQualitySummary` blend formula across boundary inputs (engagement absent / zero / saturated) — required before merging I7.
+  - CI gate: learner workflow (`.github/workflows/learner.yml`) must run on any PR touching either `services/learner/**` or `services/analytics/internal/plausible/**`, so a cross-service regression is caught before merge.
+I9. ☐ Dashboard panel "Engagement per market" in `infra/grafana/dashboards/`.
+I10. ☐ Document Plausible URL + per-market site IDs in Vault path `secret/analytics/plausible/*`.
+
+**Trigger to start:** after Phase D done + Plausible decision validated with at least one published article in prod (need real traffic to test fetch). Estimated 2–3 days work.
+
+**Fallback to GA4:** if Plausible self-hosted proves heavy on Contabo VPS S, or if a client explicitly requires GA4 integration:
+- Add `cloud.google.com/go/analyticsdata/apiv1beta` to `services/analytics/go.mod`.
+- Service Account JSON in Vault path `secret/analytics/ga4_service_account`.
+- Same fetcher interface (`FetchPageViews`, `FetchDwellTime`) — only implementation swaps.
+- Note: GDPR consent banner required for EU traffic → ~40% data loss.
+
+---
+
 ## Sequencing
 
 ```
@@ -168,6 +218,7 @@ Parallelisable: D + E + F after B done. C blocks H prod canary.
 | F     | 2    | SRE   |
 | G     | 1    | platform |
 | H     | 2–3  | infra |
+| I     | 2–3  | analytics + frontend (deferred, post-Phase D) |
 
 Total critical path ≈ 4 weeks single-thread; ≈ 2.5 weeks with 2 streams.
 

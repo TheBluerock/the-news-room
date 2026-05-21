@@ -14,6 +14,10 @@ import (
 
 const apiVersion = "v2021-06-07"
 
+// apiBaseURLTemplate is a var (not const) so tests can swap it for an httptest server.
+// "%s" is the project ID; full URL pattern: <base>/<apiVersion>/data/mutate/<dataset>.
+var apiBaseURLTemplate = "https://%s.api.sanity.io"
+
 type Client struct {
 	projectID string
 	dataset   string
@@ -72,7 +76,7 @@ func (c *Client) CreateDraft(ctx context.Context, doc ArticleDoc) error {
 		return fmt.Errorf("marshal mutation: %w", err)
 	}
 
-	url := fmt.Sprintf("https://%s.api.sanity.io/%s/data/mutate/%s",
+	url := fmt.Sprintf(apiBaseURLTemplate+"/%s/data/mutate/%s",
 		c.projectID, apiVersion, c.dataset)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
