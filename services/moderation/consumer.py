@@ -97,9 +97,14 @@ def _process(event: dict, openai_client: OpenAI, producer: Producer, analytics_c
             reason = cultural_reason if not cultural_ok else (", ".join(issues) or "quality too low")
             _publish_rejected(producer, article_id, market, reason, cultural_ok, factual_ok, quality, trace_id, headers)
 
-        # Record quality score in analytics_svc.article_performance (non-fatal)
+        # Record quality score + LLM cost in analytics_svc.article_performance (non-fatal).
+        # `usage` flows from agent → article.generated → here; if absent (old producers /
+        # tests), analytics persists with NULL token columns and zero cost.
         try:
-            analytics_client.record_quality(analytics_channel, article_id, market, quality)
+            analytics_client.record_quality(
+                analytics_channel, article_id, market, quality,
+                usage=event.get("usage") or None,
+            )
         except Exception as e:
             logger.warning("quality recording failed article_id=%s: %s", article_id, e)
 

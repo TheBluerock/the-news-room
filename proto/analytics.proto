@@ -25,9 +25,14 @@ message TrendingTopic {
 }
 
 message QualityRequest {
-  string article_id    = 1;
-  string market        = 2;
-  float  quality_score = 3;
+  string article_id        = 1;
+  string market            = 2;
+  float  quality_score     = 3;
+  // Token + model captured at LLM call site (agent), forwarded to analytics
+  // for cost computation. Added 2026-05-21 (Phase K1 cost tracking).
+  int32  prompt_tokens     = 4;
+  int32  completion_tokens = 5;
+  string model             = 6;
 }
 
 message QualityResponse {

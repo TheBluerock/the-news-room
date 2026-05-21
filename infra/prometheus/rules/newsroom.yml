@@ -26,6 +26,43 @@ groups:
             sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))
           )
 
+  # ── LLM budget ────────────────────────────────────────────────────────────
+  - name: newsroom.llm_budget
+    rules:
+      - alert: LLMBudgetLowBalance
+        expr: llm_budget_remaining_cents <= 1000 and llm_budget_remaining_cents > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "LLM monthly budget low (≤$10 remaining — fixed threshold)"
+          description: |
+            llm_budget_remaining_cents = {{ $value }} cents.
+            Fixed-dollar threshold (1000 cents). Configured cap is set via
+            LLM_BUDGET_CAP_CENTS env var on the agent service — at default
+            (5000 cents / $50) this fires at ~80% spend; tune the threshold
+            here if you raise the cap. Once remaining hits 0 the agent stops
+            calling OpenAI/Anthropic.
+            Investigate spend in Grafana `LLM cost per market` panel.
+
+      - alert: LLMBudgetExhausted
+        expr: llm_budget_kill_switch_active == 1
+        for: 0s
+        labels:
+          severity: critical
+          team: ai
+          pager: true
+        annotations:
+          summary: "LLM monthly budget EXHAUSTED — generation paused"
+          description: |
+            Hard kill-switch active. Agent will raise BudgetExhausted on every
+            pipeline run until next calendar month (Redis bucket TTL ~35d).
+            Cap is configured via LLM_BUDGET_CAP_CENTS on the agent service
+            (check current value via `docker service inspect newsroom_agent`).
+            Manual override: bump LLM_BUDGET_CAP_CENTS env var + redeploy agent,
+            OR `redis-cli DEL llm:budget:$(date -u +%Y-%m):cents`.
+
   # ── LLM pipeline ──────────────────────────────────────────────────────────
   - name: newsroom.llm
     rules:

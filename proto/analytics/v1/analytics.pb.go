@@ -178,12 +178,17 @@ func (x *TrendingTopic) GetTrendScore() float32 {
 }
 
 type QualityRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ArticleId     string                 `protobuf:"bytes,1,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
-	Market        string                 `protobuf:"bytes,2,opt,name=market,proto3" json:"market,omitempty"`
-	QualityScore  float32                `protobuf:"fixed32,3,opt,name=quality_score,json=qualityScore,proto3" json:"quality_score,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ArticleId    string                 `protobuf:"bytes,1,opt,name=article_id,json=articleId,proto3" json:"article_id,omitempty"`
+	Market       string                 `protobuf:"bytes,2,opt,name=market,proto3" json:"market,omitempty"`
+	QualityScore float32                `protobuf:"fixed32,3,opt,name=quality_score,json=qualityScore,proto3" json:"quality_score,omitempty"`
+	// Token + model captured at LLM call site (agent), forwarded to analytics
+	// for cost computation. Added 2026-05-21 (Phase K1 cost tracking).
+	PromptTokens     int32  `protobuf:"varint,4,opt,name=prompt_tokens,json=promptTokens,proto3" json:"prompt_tokens,omitempty"`
+	CompletionTokens int32  `protobuf:"varint,5,opt,name=completion_tokens,json=completionTokens,proto3" json:"completion_tokens,omitempty"`
+	Model            string `protobuf:"bytes,6,opt,name=model,proto3" json:"model,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *QualityRequest) Reset() {
@@ -235,6 +240,27 @@ func (x *QualityRequest) GetQualityScore() float32 {
 		return x.QualityScore
 	}
 	return 0
+}
+
+func (x *QualityRequest) GetPromptTokens() int32 {
+	if x != nil {
+		return x.PromptTokens
+	}
+	return 0
+}
+
+func (x *QualityRequest) GetCompletionTokens() int32 {
+	if x != nil {
+		return x.CompletionTokens
+	}
+	return 0
+}
+
+func (x *QualityRequest) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
 }
 
 type QualityResponse struct {
@@ -296,12 +322,15 @@ const file_analytics_proto_rawDesc = "" +
 	"\n" +
 	"topic_name\x18\x02 \x01(\tR\ttopicName\x12\x1f\n" +
 	"\vtrend_score\x18\x03 \x01(\x02R\n" +
-	"trendScore\"l\n" +
+	"trendScore\"\xd4\x01\n" +
 	"\x0eQualityRequest\x12\x1d\n" +
 	"\n" +
 	"article_id\x18\x01 \x01(\tR\tarticleId\x12\x16\n" +
 	"\x06market\x18\x02 \x01(\tR\x06market\x12#\n" +
-	"\rquality_score\x18\x03 \x01(\x02R\fqualityScore\"-\n" +
+	"\rquality_score\x18\x03 \x01(\x02R\fqualityScore\x12#\n" +
+	"\rprompt_tokens\x18\x04 \x01(\x05R\fpromptTokens\x12+\n" +
+	"\x11completion_tokens\x18\x05 \x01(\x05R\x10completionTokens\x12\x14\n" +
+	"\x05model\x18\x06 \x01(\tR\x05model\"-\n" +
 	"\x0fQualityResponse\x12\x1a\n" +
 	"\brecorded\x18\x01 \x01(\bR\brecorded2\xde\x01\n" +
 	"\x10AnalyticsService\x12e\n" +

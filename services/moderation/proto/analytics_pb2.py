@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x61nalytics.proto\x12\x15newsroom.analytics.v1\"0\n\x0fTrendingRequest\x12\x0e\n\x06market\x18\x01 \x01(\t\x12\r\n\x05limit\x18\x02 \x01(\x05\"H\n\x10TrendingResponse\x12\x34\n\x06topics\x18\x01 \x03(\x0b\x32$.newsroom.analytics.v1.TrendingTopic\"J\n\rTrendingTopic\x12\x10\n\x08topic_id\x18\x01 \x01(\t\x12\x12\n\ntopic_name\x18\x02 \x01(\t\x12\x13\n\x0btrend_score\x18\x03 \x01(\x02\"K\n\x0eQualityRequest\x12\x12\n\narticle_id\x18\x01 \x01(\t\x12\x0e\n\x06market\x18\x02 \x01(\t\x12\x15\n\rquality_score\x18\x03 \x01(\x02\"#\n\x0fQualityResponse\x12\x10\n\x08recorded\x18\x01 \x01(\x08\x32\xde\x01\n\x10\x41nalyticsService\x12\x65\n\x12GetTrendingSignals\x12&.newsroom.analytics.v1.TrendingRequest\x1a\'.newsroom.analytics.v1.TrendingResponse\x12\x63\n\x12RecordQualityScore\x12%.newsroom.analytics.v1.QualityRequest\x1a&.newsroom.analytics.v1.QualityResponseB4Z2github.com/newsroom/proto/analytics/v1;analyticsv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0f\x61nalytics.proto\x12\x15newsroom.analytics.v1\"0\n\x0fTrendingRequest\x12\x0e\n\x06market\x18\x01 \x01(\t\x12\r\n\x05limit\x18\x02 \x01(\x05\"H\n\x10TrendingResponse\x12\x34\n\x06topics\x18\x01 \x03(\x0b\x32$.newsroom.analytics.v1.TrendingTopic\"J\n\rTrendingTopic\x12\x10\n\x08topic_id\x18\x01 \x01(\t\x12\x12\n\ntopic_name\x18\x02 \x01(\t\x12\x13\n\x0btrend_score\x18\x03 \x01(\x02\"\x8c\x01\n\x0eQualityRequest\x12\x12\n\narticle_id\x18\x01 \x01(\t\x12\x0e\n\x06market\x18\x02 \x01(\t\x12\x15\n\rquality_score\x18\x03 \x01(\x02\x12\x15\n\rprompt_tokens\x18\x04 \x01(\x05\x12\x19\n\x11\x63ompletion_tokens\x18\x05 \x01(\x05\x12\r\n\x05model\x18\x06 \x01(\t\"#\n\x0fQualityResponse\x12\x10\n\x08recorded\x18\x01 \x01(\x08\x32\xde\x01\n\x10\x41nalyticsService\x12\x65\n\x12GetTrendingSignals\x12&.newsroom.analytics.v1.TrendingRequest\x1a\'.newsroom.analytics.v1.TrendingResponse\x12\x63\n\x12RecordQualityScore\x12%.newsroom.analytics.v1.QualityRequest\x1a&.newsroom.analytics.v1.QualityResponseB4Z2github.com/newsroom/proto/analytics/v1;analyticsv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -38,10 +38,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TRENDINGRESPONSE']._serialized_end=164
   _globals['_TRENDINGTOPIC']._serialized_start=166
   _globals['_TRENDINGTOPIC']._serialized_end=240
-  _globals['_QUALITYREQUEST']._serialized_start=242
-  _globals['_QUALITYREQUEST']._serialized_end=317
-  _globals['_QUALITYRESPONSE']._serialized_start=319
-  _globals['_QUALITYRESPONSE']._serialized_end=354
-  _globals['_ANALYTICSSERVICE']._serialized_start=357
-  _globals['_ANALYTICSSERVICE']._serialized_end=579
+  _globals['_QUALITYREQUEST']._serialized_start=243
+  _globals['_QUALITYREQUEST']._serialized_end=383
+  _globals['_QUALITYRESPONSE']._serialized_start=385
+  _globals['_QUALITYRESPONSE']._serialized_end=420
+  _globals['_ANALYTICSSERVICE']._serialized_start=423
+  _globals['_ANALYTICSSERVICE']._serialized_end=645
 # @@protoc_insertion_point(module_scope)

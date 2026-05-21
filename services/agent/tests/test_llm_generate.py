@@ -53,19 +53,27 @@ def _failing_anthropic():
 def test_openai_happy_path(redis_client):
     oc = _openai_client_returning(VALID_PAYLOAD)
     ac = MagicMock()  # never called
-    structured, article_id = llm.generate(redis_client, "italy", "PROMPT", oc, ac)
+    structured, article_id, usage = llm.generate(redis_client, "italy", "PROMPT", oc, ac)
     assert structured["title"] == "Barolo 2018"
     assert structured["section"] == "cantine"
     assert article_id  # uuid populated
     ac.messages.create.assert_not_called()
     # Circuit success path → closed state
     assert circuit.get_state(redis_client, "italy", "openai") == circuit.STATE_CLOSED
+    # Usage meta is populated even when the mock response has no `usage` attr
+    # (defaults to zero token counts, zero cost, but model name still set).
+    assert isinstance(usage, dict)
+    assert set(usage.keys()) >= {"model", "prompt_tokens", "completion_tokens", "cost_usd"}
+    assert isinstance(usage["model"], str) and usage["model"]
+    assert isinstance(usage["prompt_tokens"], int)
+    assert isinstance(usage["completion_tokens"], int)
+    assert isinstance(usage["cost_usd"], (int, float))
 
 
 def test_openai_failure_falls_back_to_anthropic(redis_client):
     oc = _failing_openai()
     ac = _anthropic_client_returning(VALID_PAYLOAD)
-    structured, article_id = llm.generate(redis_client, "italy", "PROMPT", oc, ac)
+    structured, article_id, _usage = llm.generate(redis_client, "italy", "PROMPT", oc, ac)
     assert structured["title"] == "Barolo 2018"
     assert article_id
     # OpenAI failure recorded, Anthropic success closed
@@ -102,7 +110,7 @@ def test_openai_circuit_open_skips_to_anthropic(redis_client):
         circuit.record_failure(redis_client, "italy", "openai")
     oc = MagicMock()  # should not be called
     ac = _anthropic_client_returning(VALID_PAYLOAD)
-    structured, _ = llm.generate(redis_client, "italy", "PROMPT", oc, ac)
+    structured, _, _ = llm.generate(redis_client, "italy", "PROMPT", oc, ac)
     assert structured["title"] == "Barolo 2018"
     oc.chat.completions.create.assert_not_called()
 
@@ -110,7 +118,7 @@ def test_openai_circuit_open_skips_to_anthropic(redis_client):
 def test_invalid_section_coerced_to_territori(redis_client):
     payload = {**VALID_PAYLOAD, "section": "not-a-real-section"}
     oc = _openai_client_returning(payload)
-    structured, _ = llm.generate(redis_client, "italy", "PROMPT", oc, MagicMock())
+    structured, _, _ = llm.generate(redis_client, "italy", "PROMPT", oc, MagicMock())
     assert structured["section"] == "territori"
 
 
@@ -118,7 +126,7 @@ def test_article_id_is_unique_per_call(redis_client):
     oc = _openai_client_returning(VALID_PAYLOAD)
     ids = set()
     for _ in range(10):
-        _, aid = llm.generate(redis_client, "italy", "PROMPT", oc, MagicMock())
+        _, aid, _ = llm.generate(redis_client, "italy", "PROMPT", oc, MagicMock())
         ids.add(aid)
     assert len(ids) == 10
 

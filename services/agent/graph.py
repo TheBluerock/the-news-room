@@ -80,6 +80,10 @@ class ArticleState(TypedDict):
     tags: list
     slug: str
     article_id: str
+    # Token + cost capture per LLM call. Empty {} until the generate node runs.
+    # Forwarded to moderation via article.generated event, then to analytics via
+    # RecordQualityScore gRPC for monthly spend aggregation (Phase K1).
+    usage: dict[str, Any]
 
 
 def build_graph() -> StateGraph:
@@ -186,7 +190,7 @@ def _build_prompt(state: ArticleState) -> dict:
 
 
 def _generate(state: ArticleState) -> dict:
-    structured, article_id = llm.generate(
+    structured, article_id, usage = llm.generate(
         state["rdb"],
         state["market"],
         state["prompt"],
@@ -202,6 +206,7 @@ def _generate(state: ArticleState) -> dict:
         "tags":       structured.get("tags", []),
         "slug":       llm.slugify(structured.get("title", "")),
         "article_id": article_id,
+        "usage":      usage,
     }
 
 
@@ -225,5 +230,6 @@ def _publish(state: ArticleState) -> dict:
         state["tags"],
         state["slug"],
         state["trace_id"],
+        state.get("usage") or {},
     )
     return {}

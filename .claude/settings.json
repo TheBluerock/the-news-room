@@ -1,0 +1,9 @@
+{
+  "env": {
+    "CAVEMAN_DEFAULT_MODE": "full"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"/Users/bluerock/.claude/plugins/cache/caveman/caveman/84cc3c14fa1e/hooks/caveman-statusline.sh\""
+  }
+}

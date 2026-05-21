@@ -41,8 +41,14 @@ def publish(
     tags: list[str],
     slug: str,
     trace_id: str,
+    usage: dict | None = None,
 ) -> None:
-    """Validate and produce article.generated to Redpanda."""
+    """Validate and produce article.generated to Redpanda.
+
+    ``usage`` carries the per-call token + model + cost data captured by
+    services/agent/pipeline/llm.py. Defaults to empty so older callers / tests
+    don't break, but production paths always pass it post-Phase-K1.
+    """
     event = {
         "event_id":    str(uuid.uuid4()),
         "trace_id":    trace_id,
@@ -58,6 +64,7 @@ def publish(
         "slug":        slug,
         "topic_id":    topic_id,
         "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "usage":       usage or {},
     }
 
     schema = _load_schema()

@@ -18,7 +18,18 @@
     "slug":       {"type": "string", "maxLength": 100, "pattern": "^[a-z0-9-]+$"},
     "topic_id":   {"type": "string", "format": "uuid"},
     "quality_score": {"type": "number"},
-    "timestamp":  {"type": "string", "format": "date-time"}
+    "timestamp":  {"type": "string", "format": "date-time"},
+    "usage": {
+      "type": "object",
+      "description": "Per-call LLM token + cost data, populated by agent at generation time (Phase K1). Optional for back-compat.",
+      "properties": {
+        "prompt_tokens":     {"type": "integer", "minimum": 0},
+        "completion_tokens": {"type": "integer", "minimum": 0},
+        "model":             {"type": "string"},
+        "cost_usd":          {"type": "number",  "minimum": 0}
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

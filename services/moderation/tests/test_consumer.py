@@ -45,6 +45,7 @@ def test_record_quality_called_on_approve():
         event["article_id"],
         event["market"],
         0.85,
+        usage=None,
     )
 
 
@@ -69,6 +70,7 @@ def test_record_quality_called_on_reject():
         event["article_id"],
         event["market"],
         0.3,
+        usage=None,
     )
 
 
