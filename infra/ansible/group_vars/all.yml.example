@@ -1,11 +1,25 @@
 ---
 # Copy to group_vars/all.yml and edit. group_vars/all.yml is gitignored.
 
-# SSH user already provisioned with sudo access on each VPS.
+# Admin account that the `common` role CREATES on each VPS (added to `sudo` group,
+# NOPASSWD sudoers drop-in, added to `docker` group by the `docker` role).
+# This account does NOT need to exist before the playbook runs.
+#
+# The user you ACTUALLY connect as during bootstrap is set separately, via
+# `ansible_user` in inventory.ini (typically `root` on a fresh Contabo VPS).
+# After bootstrap completes, future runs / ops should ssh as `admin_user`.
 admin_user: deploy
 
 # Docker version pin. Verify available on Debian 12 / Ubuntu 24.04 via `apt-cache madison docker-ce`.
 docker_version: "5:27.3.1-1~debian.12~bookworm"
+containerd_version: "1.7.22-1"
+docker_buildx_version: "0.17.1-1~debian.12~bookworm"
+docker_compose_version: "2.29.7-1~debian.12~bookworm"
+
+# Acknowledge the security risk: members of the `docker` group can mount /, ergo
+# they are root-equivalent. The `docker` role REFUSES to add admin_user unless
+# this is set true.
+docker_group_acknowledged: true
 
 # Subnet allowed to reach Docker daemon (only manager). Restrict tightly.
 docker_api_allowed_cidr: "127.0.0.1/32"

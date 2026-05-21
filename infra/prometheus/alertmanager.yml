@@ -1,0 +1,55 @@
+# Alertmanager routing — receivers are placeholders; wire to real Slack/PagerDuty/email post-deploy.
+# Reload after editing: `docker kill -s HUP $(docker ps -q -f name=alertmanager)`
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default-slack
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+        - pager = "true"
+      receiver: pagerduty
+      group_wait: 0s
+      repeat_interval: 30m
+
+    - matchers:
+        - severity = "critical"
+      receiver: default-slack
+      repeat_interval: 1h
+
+    - matchers:
+        - severity = "warning"
+      receiver: default-slack
+      repeat_interval: 12h
+
+receivers:
+  - name: default-slack
+    slack_configs:
+      - send_resolved: true
+        api_url_file: /run/secrets/slack_webhook_url
+        channel: "#newsroom-alerts"
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          Severity: `{{ .Labels.severity }}` · Service: `{{ .Labels.service }}`
+          {{ end }}
+
+  - name: pagerduty
+    pagerduty_configs:
+      - send_resolved: true
+        service_key_file: /run/secrets/pagerduty_service_key
+        description: '{{ .CommonAnnotations.summary }}'
+
+inhibit_rules:
+  # If a service is fully down, don't also page on its derived latency/circuit alerts.
+  - source_matchers: [alertname = "ServiceDown"]
+    target_matchers: [severity =~ "warning|critical"]
+    equal: [service]

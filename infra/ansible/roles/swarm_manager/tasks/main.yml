@@ -4,10 +4,21 @@
   register: swarm_state
   changed_when: false
 
+- name: Assert primary IPv4 fact is available for swarm advertise-addr
+  ansible.builtin.assert:
+    that:
+      - ansible_default_ipv4 is defined
+      - ansible_default_ipv4.address is defined
+      - ansible_default_ipv4.address | length > 0
+    fail_msg: >
+      ansible_default_ipv4.address is missing — likely fact gathering disabled or
+      no default route on the host. Re-run with gather_facts: true or set
+      `swarm_advertise_addr` explicitly in inventory.
+
 - name: Initialise Swarm
   ansible.builtin.command: >
     docker swarm init
-    --advertise-addr {{ ansible_default_ipv4.address }}
+    --advertise-addr {{ swarm_advertise_addr | default(ansible_default_ipv4.address) }}
     --default-addr-pool {{ swarm_default_addr_pool }}
     --default-addr-pool-mask-length {{ swarm_default_addr_pool_subnet_size }}
   when: swarm_state.stdout != "active"
@@ -23,8 +34,19 @@
   register: worker_token
   changed_when: false
 
-- name: Stash tokens as facts for other plays
+# Use add_host so the tokens land as inventory vars on this host: future plays
+# resolve them via hostvars[<first manager>] regardless of fact-caching state.
+- name: Publish swarm join facts as inventory vars
+  ansible.builtin.add_host:
+    name: "{{ inventory_hostname }}"
+    groups: swarm_managers
+    swarm_manager_token: "{{ manager_token.stdout }}"
+    swarm_worker_token: "{{ worker_token.stdout }}"
+    swarm_manager_addr: "{{ (swarm_advertise_addr | default(ansible_default_ipv4.address)) }}:2377"
+
+# Also set as host facts so the same play can reference them without a re-lookup.
+- name: Stash tokens as facts for the current play
   ansible.builtin.set_fact:
     swarm_manager_token: "{{ manager_token.stdout }}"
     swarm_worker_token: "{{ worker_token.stdout }}"
-    swarm_manager_addr: "{{ ansible_default_ipv4.address }}:2377"
+    swarm_manager_addr: "{{ (swarm_advertise_addr | default(ansible_default_ipv4.address)) }}:2377"

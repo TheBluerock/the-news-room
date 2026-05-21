@@ -1,0 +1,64 @@
+{
+  "title": "Corrections — Fast-Path TTL & Throughput",
+  "uid": "newsroom-corrections",
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-24h", "to": "now"},
+  "tags": ["newsroom", "ai", "corrections"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Minimum TTL remaining per market (seconds)",
+      "description": "Set by services/learner/internal/fastpath. Alert fires when <3600s — means slow path (PostgreSQL) is lagging.",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "correction_ttl_remaining_seconds", "legendFormat": "{{market}}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red",    "value": null},
+              {"color": "orange", "value": 3600},
+              {"color": "green",  "value": 14400}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Correction TTL trajectory",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "correction_ttl_remaining_seconds", "legendFormat": "{{market}}", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Corrections written rate (per market)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {"expr": "rate(corrections_written_total[5m])", "legendFormat": "{{market}}", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops"}}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Corrections applied (last 24h)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum by (market) (increase(corrections_written_total[24h]))", "legendFormat": "{{market}}", "refId": "A"}
+      ]
+    }
+  ]
+}

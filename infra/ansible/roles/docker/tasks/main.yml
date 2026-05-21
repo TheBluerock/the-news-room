@@ -5,6 +5,16 @@
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
 
+# Pin against the official Docker apt signing key fingerprint to detect a tampered/swapped key.
+# Verify upstream before bumping: https://docs.docker.com/engine/install/<distro>/ → "Set up Docker's apt repository".
+- name: Verify Docker GPG key fingerprint
+  ansible.builtin.command: gpg --show-keys --with-fingerprint --with-colons /etc/apt/keyrings/docker.asc
+  register: docker_gpg_key
+  changed_when: false
+  failed_when: docker_gpg_fingerprint not in (docker_gpg_key.stdout | regex_replace(':', ''))
+  vars:
+    docker_gpg_fingerprint: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+
 - name: Add Docker apt repo
   ansible.builtin.apt_repository:
     repo: "deb [arch={{ ansible_architecture | replace('x86_64', 'amd64') | replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
@@ -16,30 +26,29 @@
     name:
       - "docker-ce={{ docker_version }}"
       - "docker-ce-cli={{ docker_version }}"
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
+      - "containerd.io={{ containerd_version }}"
+      - "docker-buildx-plugin={{ docker_buildx_version }}"
+      - "docker-compose-plugin={{ docker_compose_version }}"
     state: present
     update_cache: true
 
+# Build the dict inside a single Jinja expression so `size` survives as int
+# (in Ansible 2.15 without jinja2_native, multi-line YAML dict values get cast to string).
 - name: Configure Docker daemon (live-restore, log rotation, default address pool)
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
     mode: "0644"
-    content: |
-      {
-        "live-restore": true,
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "20m",
-          "max-file": "5"
-        },
-        "default-address-pools": [
-          {"base": "{{ swarm_default_addr_pool }}", "size": {{ swarm_default_addr_pool_subnet_size }}}
+    content: >-
+      {{ {
+        'live-restore': true,
+        'log-driver': 'json-file',
+        'log-opts': {'max-size': '20m', 'max-file': '5'},
+        'default-address-pools': [
+          {'base': swarm_default_addr_pool, 'size': swarm_default_addr_pool_subnet_size | int}
         ],
-        "metrics-addr": "127.0.0.1:9323",
-        "experimental": false
-      }
+        'metrics-addr': '127.0.0.1:9323',
+        'experimental': false
+      } | to_nice_json }}
   notify: Restart docker
 
 - name: Ensure docker service started + enabled
@@ -47,6 +56,17 @@
     name: docker
     state: started
     enabled: true
+
+# Membership in the `docker` group is root-equivalent (the daemon can bind-mount /
+# into any container). Refuse silently to grant this unless the operator has set
+# `docker_group_acknowledged: true` in group_vars after reading roles/docker/README.md.
+- name: Refuse to grant docker group access until risk acknowledged
+  ansible.builtin.fail:
+    msg: >
+      Adding {{ admin_user }} to the `docker` group is equivalent to giving them
+      passwordless root. Set `docker_group_acknowledged: true` in group_vars/all.yml
+      after confirming SSH key access for {{ admin_user }} is locked down.
+  when: not (docker_group_acknowledged | default(false) | bool)
 
 - name: Add admin to docker group
   ansible.builtin.user:

@@ -111,23 +111,47 @@ Exit: coverage badges green; CI blocks PR on regression.
 
 ---
 
-## Phase E — Observability completion (3–5 days)
+## Phase E — Observability (PARTIAL — done 2026-05-21; E4 deferred)
 
-E1. ☐ Confirm `/health` + `/ready` on **port 8090** for all 6 services (auth, learner, agent, moderation, analytics, sanity). Audit + add missing.
-E2. ☐ Grafana dashboards as code in `infra/grafana/dashboards/`:
-  - LLM circuit state (`llm_circuit_state{market,provider}`).
-  - DLQ depth per topic.
-  - Correction TTL remaining (alert <3600s).
-  - Article pipeline trace latency p50/p95/p99 per market.
-  - RedPanda consumer lag per group.
-E3. ☐ Alertmanager rules:
-  - DLQ depth >0 immediate.
-  - Circuit open >5m.
-  - Migration failure.
-  - p99 latency +50% for 2m → auto-rollback hook.
-E4. ☐ OTel trace ID propagation E2E test: assert single trace per article from `topic.trending` to `article.published`.
+E1. ✔ `/health` + `/ready` on port 8090 confirmed for all 6 services (auth, learner, agent, moderation, analytics, sanity). Grep audit clean.
 
-Exit: dashboards render with synthetic data; alerts fire in staging.
+E2. ✔ Grafana dashboards as code (`infra/grafana/dashboards/`):
+  - `newsroom.json` (existed, kept).
+  - `llm-circuits.json` — circuit state per market×provider + rate-limit bucket + failure counter.
+  - `dlq.json` — DLQ depth per topic + growth rate + consumer lag per group.
+  - `correction-ttl.json` — min TTL per market (color-coded), throughput, 24h totals.
+  - `pipeline-latency.json` — p50/p95/p99 article generation per market + throughput + failures + semaphore.
+  - Provisioning already wired (`infra/grafana/provisioning/dashboards/*.yaml`).
+
+E3. ✔ Prometheus alert rules (`infra/prometheus/rules/newsroom.yml`):
+  - `LLMCircuitOpen` (5m) + `LLMBothCircuitsOpen` (pages on-call).
+  - `DLQDepthPositive` (1m).
+  - `CorrectionTTLExpiringSoon` (<3600s for 10m).
+  - `P99LatencyHigh` (+50% vs 30m baseline).
+  - `ServiceDown` (2m) + `HealthScrapeStale`.
+  - `BackupServiceNotRunning`.
+  - 2 recording rules (p50/p99 per service).
+  - Validated with `promtool check rules` → 11 rules OK.
+  - Alertmanager service added to stack: Slack default + PagerDuty for `pager=true` critical alerts.
+  - `inhibit_rules`: ServiceDown suppresses derived alerts.
+  - New secrets required: `slack_webhook_url`, `pagerduty_service_key`.
+
+E4. ☐ **Deferred** — OTel trace ID propagation E2E test needs running stack (Phase C deploy first). Integration test belongs in `services/tests/integration/` or `tests/e2e/`. Scope: trigger `topic.trending` → assert single trace_id appears in Tempo from learner consume through agent.publish through moderation.consume through sanity.publish.
+
+**Files added:** `infra/prometheus/rules/newsroom.yml`, `infra/prometheus/alertmanager.yml`, `infra/grafana/dashboards/{llm-circuits,dlq,correction-ttl,pipeline-latency}.json`.
+**Files modified:** `infra/prometheus/prometheus.yml` (rule_files + alerting + redis/vault/sanity targets + correction job removed), `infra/swarm/stack.prod.yml` (alertmanager service + 2 configs + 2 secrets).
+
+**Metrics still TBD** (referenced by dashboards/rules but not yet emitted by services — track as code TODOs):
+- `llm_rate_bucket_tokens` (agent — expose Redis bucket as Prometheus gauge).
+- `llm_failures_total` (agent — counter per market/provider, increment on circuit failure).
+- `kafka_topic_partition_current_offset`, `kafka_consumer_group_lag_sum` (RedPanda exporter — verify exposed by `redpanda:9644`).
+- `article_pipeline_duration_seconds_bucket` (agent — histogram around full graph run).
+- `article_pipeline_completed_total` + `article_pipeline_failed_total{reason}` (agent).
+- `article_pipeline_concurrent_runs{market}` (agent — gauge from semaphore wrapper).
+- `http_request_duration_seconds_bucket` (all services — generic HTTP histogram).
+- Add in **Phase J — Metric emission** (new sub-phase, ~1 day, can run in parallel with Phase F runbooks).
+
+Exit: dashboards provisioned + alerts loaded; firing requires Phase C deploy + Phase J metric emission.
 
 ---
 

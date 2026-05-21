@@ -1,0 +1,99 @@
+{
+  "title": "Pipeline — Article Latency per Market (p50/p95/p99)",
+  "uid": "newsroom-pipeline",
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-3h", "to": "now"},
+  "tags": ["newsroom", "ai", "pipeline"],
+  "templating": {
+    "list": [
+      {"name": "market", "type": "custom", "query": "italy,usa,china", "includeAll": true, "multi": true, "current": {"text": "All", "value": "$__all"}}
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Article generation duration p50",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (market, le) (rate(article_pipeline_duration_seconds_bucket{market=~\"$market\"}[5m])))",
+          "legendFormat": "{{market}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "p95",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (market, le) (rate(article_pipeline_duration_seconds_bucket{market=~\"$market\"}[5m])))",
+          "legendFormat": "{{market}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "p99",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (market, le) (rate(article_pipeline_duration_seconds_bucket{market=~\"$market\"}[5m])))",
+          "legendFormat": "{{market}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Articles generated per minute",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "sum by (market) (rate(article_pipeline_completed_total{market=~\"$market\"}[1m])) * 60",
+          "legendFormat": "{{market}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Pipeline failures per minute",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "sum by (market, reason) (rate(article_pipeline_failed_total{market=~\"$market\"}[1m])) * 60",
+          "legendFormat": "{{market}} / {{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Active per-market semaphore usage (concurrent runs)",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "article_pipeline_concurrent_runs{market=~\"$market\"}",
+          "legendFormat": "{{market}}",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
+    }
+  ]
+}

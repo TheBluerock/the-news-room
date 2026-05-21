@@ -40,33 +40,35 @@
   when: false  # Outer-loop friendly version below.
 
 # Per-node allow rules: each cluster node may reach each peer on swarm ports.
+# Exclude self by comparing inventory_hostname (reliable, always defined) instead of
+# ansible_host (may be a DNS name, may be undefined → template errors).
 - name: Allow Swarm TCP ports from each peer
   community.general.ufw:
     rule: allow
     port: "{{ port }}"
     proto: tcp
-    src: "{{ hostvars[peer].ansible_host }}"
+    src: "{{ hostvars[peer].ansible_host | default(hostvars[peer].ansible_default_ipv4.address | default('')) }}"
   loop: "{{ swarm_ports_tcp | product(groups['swarm']) | list }}"
   loop_control:
     loop_var: combo
   vars:
     port: "{{ combo.0 }}"
     peer: "{{ combo.1 }}"
-  when: hostvars[peer].ansible_host != ansible_default_ipv4.address
+  when: peer != inventory_hostname
 
 - name: Allow Swarm UDP ports from each peer
   community.general.ufw:
     rule: allow
     port: "{{ port }}"
     proto: udp
-    src: "{{ hostvars[peer].ansible_host }}"
+    src: "{{ hostvars[peer].ansible_host | default(hostvars[peer].ansible_default_ipv4.address | default('')) }}"
   loop: "{{ swarm_ports_udp | product(groups['swarm']) | list }}"
   loop_control:
     loop_var: combo
   vars:
     port: "{{ combo.0 }}"
     peer: "{{ combo.1 }}"
-  when: hostvars[peer].ansible_host != ansible_default_ipv4.address
+  when: peer != inventory_hostname
 
 - name: Enable UFW
   community.general.ufw:

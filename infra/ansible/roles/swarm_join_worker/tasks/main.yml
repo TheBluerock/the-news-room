@@ -4,6 +4,19 @@
   register: swarm_state
   changed_when: false
 
+- name: Assert join facts are present on the first manager
+  ansible.builtin.assert:
+    that:
+      - hostvars[groups['swarm_managers'][0]].swarm_worker_token is defined
+      - hostvars[groups['swarm_managers'][0]].swarm_worker_token | length > 0
+      - hostvars[groups['swarm_managers'][0]].swarm_manager_addr is defined
+      - hostvars[groups['swarm_managers'][0]].swarm_manager_addr | length > 0
+    fail_msg: >
+      swarm_worker_token / swarm_manager_addr missing on
+      {{ groups['swarm_managers'][0] }} — the swarm_manager role must run first
+      so its set_fact / add_host outputs are visible here.
+  when: swarm_state.stdout != "active"
+
 - name: Join Swarm as worker
   ansible.builtin.command: >
     docker swarm join

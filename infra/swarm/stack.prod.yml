@@ -9,6 +9,11 @@ version: "3.9"
 # Docker Swarm secrets required (create with `docker secret create`):
 #   vault_role_id_<service>    — Vault AppRole role_id per service
 #   vault_secret_id_<service>  — Vault AppRole secret_id per service
+#   vault_token                — token used by `backup` service to snapshot Vault.
+#                                If Vault is not yet bootstrapped, create a placeholder so
+#                                `docker stack deploy` does not fail on the external secret:
+#                                    printf 'PLACEHOLDER' | docker secret create vault_token -
+#                                run-backup.sh detects an unusable token and skips the snapshot.
 #
 # Infrastructure (postgres, redis, redpanda, vault) should run on nodes
 # labelled role=infra:  docker node update --label-add role=infra <node>
@@ -150,14 +155,39 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
     configs:
       - source: prometheus_config
         target: /etc/prometheus/prometheus.yml
+      - source: prometheus_rules
+        target: /etc/prometheus/rules/newsroom.yml
     networks: [newsroom_net]
     deploy:
       replicas: 1
       resources:
         limits:   {cpus: "0.5", memory: 512M}
+      <<: *infra-deploy
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    configs:
+      - source: alertmanager_config
+        target: /etc/alertmanager/alertmanager.yml
+    secrets:
+      - slack_webhook_url
+      - pagerduty_service_key
+    networks: [newsroom_net]
+    deploy:
+      replicas: 1
+      resources:
+        limits:   {cpus: "0.25", memory: 128M}
       <<: *infra-deploy
 
   grafana:
@@ -526,12 +556,20 @@ secrets:
     external: true
   vault_token:
     external: true
+  slack_webhook_url:
+    external: true
+  pagerduty_service_key:
+    external: true
 
 configs:
   tempo_config:
     file: ../tempo/tempo.yaml
   prometheus_config:
     file: ../prometheus/prometheus.yml
+  prometheus_rules:
+    file: ../prometheus/rules/newsroom.yml
+  alertmanager_config:
+    file: ../prometheus/alertmanager.yml
   caddy_config:
     file: ../caddy/Caddyfile
   entrypoint:

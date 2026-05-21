@@ -1,0 +1,147 @@
+# Alert + recording rules for AI Newsroom.
+# Loaded by prometheus.yml: rule_files: /etc/prometheus/rules/*.yml
+#
+# Severity convention:
+#   critical → page on-call immediately
+#   warning  → ticket, investigate next business day
+#   info     → dashboard noise only, no routing
+
+groups:
+  # ── Recording rules: pre-aggregations for dashboards ───────────────────────
+  - name: newsroom.recording
+    interval: 30s
+    rules:
+      - record: job:up:avg
+        expr: avg by (service) (up)
+
+      - record: job:request_latency_seconds:p99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: job:request_latency_seconds:p50
+        expr: |
+          histogram_quantile(0.50,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))
+          )
+
+  # ── LLM pipeline ──────────────────────────────────────────────────────────
+  - name: newsroom.llm
+    rules:
+      - alert: LLMCircuitOpen
+        expr: llm_circuit_state == 1
+        for: 5m
+        labels:
+          severity: critical
+          team: ai
+        annotations:
+          summary: "LLM circuit OPEN for {{ $labels.market }}/{{ $labels.provider }}"
+          description: |
+            Circuit breaker has been OPEN for >5m. Articles for market={{ $labels.market }}
+            cannot be generated via provider={{ $labels.provider }}. Other provider may
+            still be available — check llm_circuit_state for the alternative.
+            Runbook: ops/LLM-CIRCUIT.md
+
+      - alert: LLMBothCircuitsOpen
+        expr: |
+          sum by (market) (llm_circuit_state == 1) >= 2
+        for: 2m
+        labels:
+          severity: critical
+          team: ai
+          pager: true
+        annotations:
+          summary: "All LLM providers down for {{ $labels.market }}"
+          description: |
+            Both OpenAI and Anthropic circuits open for market={{ $labels.market }}.
+            Pipeline queueing exponential backoff → DLQ. Investigate provider status.
+
+  # ── DLQ ───────────────────────────────────────────────────────────────────
+  - name: newsroom.dlq
+    rules:
+      - alert: DLQDepthPositive
+        expr: |
+          (sum by (topic) (kafka_topic_partition_current_offset{topic=~".*\\.dlq"})
+           - sum by (topic) (kafka_consumer_group_lag_sum{topic=~".*\\.dlq"})) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "DLQ {{ $labels.topic }} has messages"
+          description: |
+            DLQ depth > 0 for {{ $labels.topic }}. Inspect with `make dlq-list`,
+            replay with `make dlq-replay TOPIC={{ $labels.topic }}` after fixing root cause.
+            Runbook: ops/DLQ-handling.md
+
+  # ── Correction fast-path ──────────────────────────────────────────────────
+  - name: newsroom.corrections
+    rules:
+      - alert: CorrectionTTLExpiringSoon
+        expr: correction_ttl_remaining_seconds < 3600
+        for: 10m
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "Correction for {{ $labels.market }} expiring (<1h) without slow-path apply"
+          description: |
+            Editor correction in Redis fast-path has <1h TTL but learner has not yet
+            applied it to PostgreSQL. Slow path is delayed — investigate learner consumer.
+            Runbook: ops/CORRECTION-LAG.md
+
+  # ── Pipeline latency ──────────────────────────────────────────────────────
+  - name: newsroom.latency
+    rules:
+      - alert: P99LatencyHigh
+        expr: |
+          (job:request_latency_seconds:p99
+           / job:request_latency_seconds:p99 offset 30m) > 1.5
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.service }} p99 latency +50% vs 30m ago"
+          description: |
+            p99 latency for {{ $labels.service }} increased >50% over 30m baseline.
+            Triggers auto-rollback if active during canary. Investigate slow downstream
+            calls or LLM provider degradation.
+
+  # ── Service health ────────────────────────────────────────────────────────
+  - name: newsroom.health
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Service {{ $labels.job }} down"
+          description: "Prometheus scrape of {{ $labels.instance }} failed for >2m."
+
+      - alert: HealthScrapeStale
+        expr: time() - timestamp(up) > 300
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Stale metrics from {{ $labels.job }}"
+
+  # ── Backup ────────────────────────────────────────────────────────────────
+  - name: newsroom.backup
+    rules:
+      - alert: BackupServiceNotRunning
+        expr: absent_over_time(up{job="cadvisor"}[15m]) == 1 or count by (cluster) (container_last_seen{name="newsroom_backup.1"}) == 0
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Backup cron container not seen for >15m"
+          description: |
+            Verify with `docker service ps newsroom_backup`. If failed, check
+            /var/backups/backup.log inside the container for the last run.

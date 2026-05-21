@@ -26,15 +26,23 @@
   ansible.builtin.user:
     name: "{{ admin_user }}"
     groups: sudo
+    append: true        # do NOT clobber existing group memberships on re-runs
     shell: /bin/bash
     create_home: true
     state: present
 
+# SECURITY: passwordless sudo for `admin_user` is convenient for automation but means
+# any compromise of the SSH key for this account = full root. Mitigations REQUIRED:
+#   - SSH key-only auth (PasswordAuthentication no); rotate keys regularly
+#   - Restrict who holds the private key; consider hardware-backed keys
+#   - For higher-trust deployments, narrow NOPASSWD to specific commands (apt, systemctl, docker)
+# Set admin_sudo_nopasswd=false in group_vars to require a password for sudo instead.
 - name: Allow admin sudo without password
   ansible.builtin.copy:
     dest: "/etc/sudoers.d/90-{{ admin_user }}"
     content: "{{ admin_user }} ALL=(ALL) NOPASSWD: ALL\n"
     mode: "0440"
+  when: admin_sudo_nopasswd | default(true) | bool
 
 - name: Apply sysctl tuning
   ansible.posix.sysctl:
@@ -45,25 +53,34 @@
     reload: true
   loop: "{{ sysctl_settings | dict2items }}"
 
-- name: Ensure /srv/newsroom data root exists
+# Per-service data dir ownership: matches the in-container UID/GID each upstream image expects.
+# Override or extend via `newsroom_service_owners` in group_vars to swap in distro/site values.
+- name: Ensure /srv/newsroom data dirs exist with per-service ownership
   ansible.builtin.file:
-    path: "/srv/newsroom/{{ item }}"
+    path: "/srv/newsroom/{{ item.key }}"
     state: directory
-    owner: root
-    group: root
-    mode: "0750"
-  loop:
-    - postgres
-    - redis
-    - redpanda
-    - vault
-    - tempo
-    - prometheus
-    - grafana
-    - caddy
-    - backups
+    owner: "{{ item.value.owner }}"
+    group: "{{ item.value.group }}"
+    mode: "{{ item.value.mode }}"
+  loop: "{{ (newsroom_service_owners | default(_default_service_owners)) | dict2items }}"
+  vars:
+    _default_service_owners:
+      postgres:   {owner: "70",   group: "70",   mode: "0700"}   # postgres image UID
+      redis:      {owner: "999",  group: "999",  mode: "0750"}   # redis image UID
+      redpanda:   {owner: "101",  group: "101",  mode: "0750"}   # redpanda image UID
+      vault:      {owner: "100",  group: "1000", mode: "0750"}   # hashicorp/vault UID
+      tempo:      {owner: "10001", group: "10001", mode: "0750"} # grafana/tempo UID
+      prometheus: {owner: "65534", group: "65534", mode: "0750"} # prom nobody:nogroup
+      grafana:    {owner: "472",  group: "472",  mode: "0750"}   # grafana image UID
+      caddy:      {owner: "0",    group: "0",    mode: "0750"}   # caddy runs as root
+      backups:    {owner: "0",    group: "0",    mode: "0750"}
 
-- name: Disable swap (Swarm + Redis perf)
+- name: Turn off any active swap immediately
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+  failed_when: false
+
+- name: Remove swap entry from fstab (persist disabled across reboots)
   ansible.posix.mount:
     name: swap
     fstype: swap

@@ -1,8 +1,10 @@
 ---
+# Bounded ranges: lock to current major to avoid surprise breakage.
+# Bump the upper bound deliberately when validating a new major locally.
 collections:
   - name: community.general
-    version: ">=10.0.0"
+    version: ">=10.0.0,<11.0.0"
   - name: community.docker
-    version: ">=4.5.0"
+    version: ">=4.5.0,<5.0.0"
   - name: ansible.posix
-    version: ">=2.0.0"
+    version: ">=2.0.0,<3.0.0"

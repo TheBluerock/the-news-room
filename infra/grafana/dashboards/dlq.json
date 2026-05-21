@@ -1,0 +1,62 @@
+{
+  "title": "RedPanda — DLQ Depth & Consumer Lag",
+  "uid": "newsroom-dlq",
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "tags": ["newsroom", "platform", "dlq", "redpanda"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Current DLQ message count per topic",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum by (topic) (kafka_topic_partition_current_offset{topic=~\".*\\\\.dlq\"})",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "DLQ growth over time",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "rate(kafka_topic_partition_current_offset{topic=~\".*\\\\.dlq\"}[5m])",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Consumer lag per group",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "sum by (group, topic) (kafka_consumer_group_lag_sum)",
+          "legendFormat": "{{group}} / {{topic}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

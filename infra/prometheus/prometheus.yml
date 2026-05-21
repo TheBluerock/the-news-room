@@ -1,35 +1,89 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: newsroom
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
+  # ── App services (health + Prometheus metrics on :8090) ───────────────────
   - job_name: auth
     static_configs:
       - targets: ["auth:8090"]
+        labels: {service: auth}
 
   - job_name: learner
     static_configs:
       - targets: ["learner:8090"]
+        labels: {service: learner}
 
   - job_name: agent
     static_configs:
       - targets: ["agent:8090"]
+        labels: {service: agent}
 
   - job_name: moderation
     static_configs:
       - targets: ["moderation:8090"]
-
-  - job_name: correction
-    static_configs:
-      - targets: ["correction:8090"]
+        labels: {service: moderation}
 
   - job_name: analytics
     static_configs:
       - targets: ["analytics:8090"]
+        labels: {service: analytics}
 
+  - job_name: sanity
+    static_configs:
+      - targets: ["sanity:8090"]
+        labels: {service: sanity}
+
+  # ── Infrastructure ────────────────────────────────────────────────────────
   - job_name: redpanda
     static_configs:
       - targets: ["redpanda:9644"]
+        labels: {service: redpanda}
 
   - job_name: postgres
     static_configs:
       - targets: ["postgres-exporter:9187"]
+        labels: {service: postgres}
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels: {service: redis}
+
+  - job_name: vault
+    metrics_path: /v1/sys/metrics
+    params:
+      format: ["prometheus"]
+    static_configs:
+      - targets: ["vault:8200"]
+        labels: {service: vault}
+
+  # ── Host metrics (installed by Ansible observability role on host network) ─
+  - job_name: node
+    static_configs:
+      - targets: ["host.docker.internal:9100"]
+        labels: {service: host}
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels: {service: containers}
+
+  # ── Self ──────────────────────────────────────────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]

@@ -1,0 +1,64 @@
+{
+  "title": "LLM — Circuit Breakers & Rate Limits",
+  "uid": "newsroom-llm",
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-3h", "to": "now"},
+  "tags": ["newsroom", "ai", "llm"],
+  "templating": {
+    "list": [
+      {"name": "market", "type": "custom", "query": "italy,usa,china", "includeAll": true, "multi": true, "current": {"text": "All", "value": "$__all"}}
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Circuit state per market×provider (0=closed, 1=open, 2=half-open)",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "llm_circuit_state{market=~\"$market\"}", "legendFormat": "{{market}} / {{provider}}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "CLOSED", "color": "green"}}},
+            {"type": "value", "options": {"1": {"text": "OPEN",   "color": "red"}}},
+            {"type": "value", "options": {"2": {"text": "HALF",   "color": "orange"}}}
+          ],
+          "color": {"mode": "thresholds"}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Circuit state over time",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "llm_circuit_state{market=~\"$market\"}", "legendFormat": "{{market}}/{{provider}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Rate-limit bucket tokens remaining",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "description": "Set by services/agent/pipeline/rate_limit.py via Redis key llm:rate:{market}. Requires exposing as Prometheus gauge llm_rate_bucket_tokens; placeholder query.",
+      "targets": [
+        {"expr": "llm_rate_bucket_tokens{market=~\"$market\"}", "legendFormat": "{{market}}", "refId": "A"}
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Total LLM failures (last 24h)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum(increase(llm_failures_total{market=~\"$market\"}[24h])) by (market, provider)", "legendFormat": "{{market}}/{{provider}}", "refId": "A"}
+      ]
+    }
+  ]
+}

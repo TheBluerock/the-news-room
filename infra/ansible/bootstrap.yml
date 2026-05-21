@@ -39,17 +39,32 @@
   roles:
     - swarm_join_worker
 
+- name: Resolve each Swarm node's own ID (so labelling works regardless of inventory naming)
+  hosts: swarm
+  become: true
+  tasks:
+    - name: Get this node's Swarm node ID
+      ansible.builtin.command: docker info --format '{% raw %}{{ .Swarm.NodeID }}{% endraw %}'
+      register: swarm_node_id
+      changed_when: false
+
+    - name: Stash node ID as host fact
+      ansible.builtin.set_fact:
+        swarm_node_id_self: "{{ swarm_node_id.stdout }}"
+
 - name: Label nodes for placement constraints (infra / app)
   hosts: swarm_managers[0]
   become: true
   tasks:
-    - name: Label all nodes per inventory role_label
+    - name: Label each node by its own Swarm node ID
       ansible.builtin.command: >
-        docker node update --label-add role={{ hostvars[item].role_label | default('app') }} {{ item }}
+        docker node update
+        --label-add role={{ hostvars[item].role_label | default('app') }}
+        {{ hostvars[item].swarm_node_id_self }}
       loop: "{{ groups['swarm'] }}"
       changed_when: true
 
-    - name: Print swarm status
+    - name: Capture swarm status
       ansible.builtin.command: docker node ls
       changed_when: false
       register: nodes_out
@@ -57,3 +72,10 @@
     - name: Show swarm topology
       ansible.builtin.debug:
         var: nodes_out.stdout_lines
+
+    - name: Assert all expected nodes are present in swarm
+      ansible.builtin.assert:
+        that:
+          - nodes_out.stdout is search(hostvars[item].swarm_node_id_self[:12])
+        fail_msg: "Node {{ item }} (id {{ hostvars[item].swarm_node_id_self }}) missing from `docker node ls` output."
+      loop: "{{ groups['swarm'] }}"
